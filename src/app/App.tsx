@@ -157,7 +157,7 @@ const CLASS_ATTACK_DIE: Record<ClassName, number> = {
   Fighter: 8, Wizard: 4,
 };
 const CLASS_HIT_DIE: Record<ClassName, number> = {
-  Fighter: 12, Wizard: 6,
+  Fighter: 8, Wizard: 6,
 };
 
 const STAT_LABELS: StatKey[] = ["PHYS", "CON", "INT", "SOC"];
