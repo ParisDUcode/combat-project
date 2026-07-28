@@ -1026,6 +1026,15 @@ export default function App() {
     currentCharges: number,
     maxCharges: number,
   ) => {
+    if (field === "max") {
+      setChargeInputHints((prev) => ({ ...prev, [String(itemId)]: "Max charges are fixed for weapons." }));
+      setChargeInputDrafts((prev) => ({
+        ...prev,
+        [getChargeDraftKey(itemId, "max")]: String(maxCharges),
+      }));
+      return;
+    }
+
     const key = getChargeDraftKey(itemId, field);
     setChargeInputDrafts((prev) => ({ ...prev, [key]: rawValue }));
     const active = chargeInputTimers.current[key];
@@ -2659,22 +2668,12 @@ export default function App() {
                                 className="w-16 px-1.5 py-0.5 text-[10px] outline-none"
                                 style={{ background: "#171208", border: "1px solid rgba(196,133,58,0.35)", borderRadius: 4, color: "#c4853a", fontFamily: "'JetBrains Mono', monospace" }}
                               />
-                              <label className="text-[10px]" style={{ color: "#9a8a6a", fontFamily: "'JetBrains Mono', monospace" }}>
-                                Max
-                              </label>
-                              <input
-                                type="number"
-                                min={1}
-                                value={getChargeInputValue(normalizedWeapon.id, "max", maxCharges)}
-                                onChange={(e) => {
-                                  queueChargeInputApply(normalizedWeapon.id, "max", e.target.value, charges, maxCharges);
-                                }}
-                                className="w-16 px-1.5 py-0.5 text-[10px] outline-none"
-                                style={{ background: "#171208", border: "1px solid rgba(196,133,58,0.35)", borderRadius: 4, color: "#c4853a", fontFamily: "'JetBrains Mono', monospace" }}
-                              />
+                              <span className="text-[10px]" style={{ color: "#9a8a6a", fontFamily: "'JetBrains Mono', monospace" }}>
+                                Max {maxCharges}
+                              </span>
                             </div>
                             <div className="text-[10px] mb-2" style={{ color: "#6a5a3a", fontFamily: "'JetBrains Mono', monospace" }}>
-                              Cur range: 0-{maxCharges} | Max min: 1
+                              Cur range: 0-{maxCharges}
                             </div>
                             {chargeInputHints[String(normalizedWeapon.id)] ? (
                               <div className="text-[10px] mb-2" style={{ color: "#c4853a", fontFamily: "'JetBrains Mono', monospace" }}>
@@ -2791,22 +2790,12 @@ export default function App() {
                               className="w-16 px-1.5 py-0.5 text-[10px] outline-none"
                               style={{ background: "#171208", border: "1px solid rgba(196,133,58,0.35)", borderRadius: 4, color: "#c4853a", fontFamily: "'JetBrains Mono', monospace" }}
                             />
-                            <label className="text-[10px]" style={{ color: "#9a8a6a", fontFamily: "'JetBrains Mono', monospace" }}>
-                              Max
-                            </label>
-                            <input
-                              type="number"
-                              min={1}
-                              value={getChargeInputValue(normalizedWeapon.id, "max", maxCharges)}
-                              onChange={(e) => {
-                                queueChargeInputApply(normalizedWeapon.id, "max", e.target.value, charges, maxCharges);
-                              }}
-                              className="w-16 px-1.5 py-0.5 text-[10px] outline-none"
-                              style={{ background: "#171208", border: "1px solid rgba(196,133,58,0.35)", borderRadius: 4, color: "#c4853a", fontFamily: "'JetBrains Mono', monospace" }}
-                            />
+                            <span className="text-[10px]" style={{ color: "#9a8a6a", fontFamily: "'JetBrains Mono', monospace" }}>
+                              Max {maxCharges}
+                            </span>
                           </div>
                           <div className="text-[10px] mb-2" style={{ color: "#6a5a3a", fontFamily: "'JetBrains Mono', monospace" }}>
-                            Cur range: 0-{maxCharges} | Max min: 1
+                            Cur range: 0-{maxCharges}
                           </div>
                           {chargeInputHints[String(normalizedWeapon.id)] ? (
                             <div className="text-[10px] mb-2" style={{ color: "#c4853a", fontFamily: "'JetBrains Mono', monospace" }}>
@@ -3581,22 +3570,12 @@ export default function App() {
                               className="w-16 px-1.5 py-0.5 text-[10px] outline-none"
                               style={{ background: "#171208", border: "1px solid rgba(196,133,58,0.35)", borderRadius: 4, color: "#c4853a", fontFamily: "'JetBrains Mono', monospace" }}
                             />
-                            <label className="text-[10px]" style={{ color: "#9a8a6a", fontFamily: "'JetBrains Mono', monospace" }}>
-                              Max
-                            </label>
-                            <input
-                              type="number"
-                              min={1}
-                              value={getChargeInputValue(normalizedWeapon.id, "max", maxCharges)}
-                              onChange={(e) => {
-                                queueChargeInputApply(normalizedWeapon.id, "max", e.target.value, charges, maxCharges);
-                              }}
-                              className="w-16 px-1.5 py-0.5 text-[10px] outline-none"
-                              style={{ background: "#171208", border: "1px solid rgba(196,133,58,0.35)", borderRadius: 4, color: "#c4853a", fontFamily: "'JetBrains Mono', monospace" }}
-                            />
+                            <span className="text-[10px]" style={{ color: "#9a8a6a", fontFamily: "'JetBrains Mono', monospace" }}>
+                              Max {maxCharges}
+                            </span>
                           </div>
                           <div className="text-[10px] mb-2" style={{ color: "#6a5a3a", fontFamily: "'JetBrains Mono', monospace" }}>
-                            Cur range: 0-{maxCharges} | Max min: 1
+                            Cur range: 0-{maxCharges}
                           </div>
                           {chargeInputHints[String(normalizedWeapon.id)] ? (
                             <div className="text-[10px] mb-2" style={{ color: "#c4853a", fontFamily: "'JetBrains Mono', monospace" }}>
