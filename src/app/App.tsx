@@ -3746,7 +3746,7 @@ export default function App() {
             {/* Footer */}
             <div className="flex items-center justify-between px-6 py-4" style={{ borderTop: "1px solid rgba(196,133,58,0.15)" }}>
               <span className="text-xs" style={{ color: "#9a8a6a", fontFamily: "'Crimson Pro', serif" }}>
-                {fightCombatants.length} enemy{fightCombatants.length !== 1 ? "ies" : ""} · {fightAllies.length} all{fightAllies.length !== 1 ? "ies" : "y"}
+                {fightCombatants.length} {fightCombatants.length !== 1 ? "enemies" : "enemy"} · {fightAllies.length} all{fightAllies.length !== 1 ? "ies" : "y"}
                 {fightCombatants.length > 0 && ` · Total power ${combatTotalPower}`}
               </span>
               <button

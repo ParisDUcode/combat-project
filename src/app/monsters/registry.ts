@@ -1,5 +1,6 @@
 import type { MonsterDefinition } from "./types";
 import { normalizeMonsterCollection, normalizeMonsterDefinition } from "./types";
+import { akkiDemon } from "./definitions/akkiDemon";
 import { animatedArmor } from "./definitions/animatedArmor";
 import { animatronic } from "./definitions/animatronic";
 import { lowTierGoon } from "./definitions/lowTierGoon";
@@ -7,6 +8,7 @@ import { wolf } from "./definitions/wolf";
 import { zombie } from "./definitions/zombie";
 
 const RAW_MONSTERS: MonsterDefinition[] = [
+  akkiDemon,
   wolf,
   animatedArmor,
   zombie,
