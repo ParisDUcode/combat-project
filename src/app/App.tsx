@@ -116,7 +116,7 @@ const BASE_CHEST: InventoryItem = {
   id: -1, name: "Leather Tunic", type: "armor", slot: "chest", acBonus: 2, description: "A simple leather chest piece.",
 };
 const BASE_PANTS: InventoryItem = {
-  id: -2, name: "Basic Trousers", type: "armor", slot: "pants", statBonus: { CON: 1 }, description: "Sturdy traveling trousers.",
+  id: -2, name: "Basic Trousers", type: "armor", slot: "pants", magicResistBonus: 1, description: "Sturdy traveling trousers.",
 };
 const BASE_BOOTS: InventoryItem = {
   id: -3, name: "Leather Shoes", type: "armor", slot: "boots", speedBonus: 1, description: "Worn but reliable footwear.",
