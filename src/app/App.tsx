@@ -2771,7 +2771,7 @@ export default function App() {
                                     : `d${atk.die ?? "?"} + ${atk.stat ?? "?"}(${sv})${atk.damageBonus ? ` +${atk.damageBonus}` : ""}`}
                                 </div>
                                 {atk.description ? (
-                                  <div className="text-[10px] mt-0.5 italic" style={{ color: "#6a5a3a", fontFamily: "'Crimson Pro', serif" }}>
+                                  <div className="text-xs leading-snug mt-1" style={{ color: "#8a7a5a", fontFamily: "'Crimson Pro', serif" }}>
                                     {atk.description}
                                   </div>
                                 ) : null}
@@ -3509,7 +3509,7 @@ export default function App() {
                                   {preview}
                                 </div>
                                 {action.description ? (
-                                  <div className="text-[10px] leading-tight mt-0.5 italic" style={{ color: "#6a5a3a", fontFamily: "'Crimson Pro', serif" }}>
+                                  <div className="text-xs leading-snug mt-1" style={{ color: "#8a7a5a", fontFamily: "'Crimson Pro', serif" }}>
                                     {action.description}
                                   </div>
                                 ) : null}
@@ -3583,7 +3583,7 @@ export default function App() {
                                 {atk.name}: {atk.formula ? atk.formula : `d${atk.die ?? "?"}+${atk.stat ?? "?"}`}{atk.consumesCharge ? " ⚡" : ""}
                               </span>
                               {atk.description ? (
-                                <div className="text-[10px] leading-tight italic" style={{ color: "#6a5a3a", fontFamily: "'Crimson Pro', serif" }}>
+                                <div className="text-xs leading-snug mt-0.5" style={{ color: "#8a7a5a", fontFamily: "'Crimson Pro', serif" }}>
                                   {atk.description}
                                 </div>
                               ) : null}
