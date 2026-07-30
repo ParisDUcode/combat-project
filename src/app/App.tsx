@@ -35,6 +35,7 @@ interface WeaponAttack {
   formula?: string; // full formula, e.g. "2*PHYS + 1d8 + 4"
   damageBonus?: number;
   consumesCharge?: boolean; // if true, using this attack spends 1 weapon charge
+  description?: string;
 }
 
 interface AbilityAction {
@@ -44,6 +45,7 @@ interface AbilityAction {
   formula?: string;
   damageBonus?: number;
   consumesTally?: boolean; // if true, spends 1 tally use when action succeeds
+  description?: string;
 }
 
 interface Ability {
@@ -222,7 +224,7 @@ const SECONDARY_DESCRIPTIONS: Record<string, string> = {
   physAC:      "Armor — mitigates physical damage 1 to 1. Each point of Armor absorbs one point of incoming physical damage before it reaches your HP.",
   magicResist: "Magic Resist — mitigates magical damage 1 to 1. Each point absorbs one point of incoming magic damage before it reaches your HP.",
   Initiative:  "Initiative — equals your PHYS score. Determines who acts first when combat begins.",
-  Speed:       "Speed — base movement. Starts at 5, increased by boots and other gear. Used by the DM to determine range.",
+  Speed:       "Speed — base movement. Fighter starts at 3, Wizard starts at 2, then increases from boots and other gear. Used by the DM to determine range.",
 };
 
 const EQUIP_SLOTS: { key: EquipSlot; label: string; accepts: ItemType[] }[] = [
@@ -1332,6 +1334,7 @@ export default function App() {
                         ...(attack.formula !== undefined ? { formula: normalizeFormulaStatTokens(String(attack.formula)) } : {}),
                         ...(attack.damageBonus !== undefined ? { damageBonus: Number(attack.damageBonus) || 0 } : {}),
                         ...(attack.consumesCharge !== undefined ? { consumesCharge: Boolean(attack.consumesCharge) } : {}),
+                        ...(attack.description !== undefined ? { description: String(attack.description) } : {}),
                       } as WeaponAttack;
                     }),
                 } : {}),
@@ -1742,10 +1745,11 @@ export default function App() {
       "- If weaponFormula is present, it overrides legacy damage fields for damage calc.\n" +
       "- heal (number), healDie (number), healStat (PHYS|CON|INT|SOC) are supported in this mode.\n" +
       "\nMULTI-ATTACK DAMAGE MODE (attacks array present):\n" +
-      "- attacks: [{ name, die?, stat?, formula?, damageBonus?, consumesCharge? }]\n" +
+      "- attacks: [{ name, die?, stat?, formula?, damageBonus?, consumesCharge?, description? }]\n" +
       "- Each attack must include either formula OR (die and stat).\n" +
       "- formula takes precedence over die/stat for that attack.\n" +
       "- consumesCharge true spends 1 charge per use.\n" +
+      "- description on an attack is optional and displays under that specific attack in the UI.\n" +
       "\nFORMULA/PERMUTATION RULES:\n" +
       "- Supported stat tokens: PHYS, CON, INT, SOC\n" +
       "- Compound stats are valid where stat is used: e.g. \"PHYS+INT\"\n" +
@@ -1770,7 +1774,7 @@ export default function App() {
       "- Minimal single-attack formula:\n" +
       "  {\"name\":\"Formula Blade\",\"type\":\"weapon\",\"icon\":\"✦\",\"weaponFormula\":\"1d6 + PHYS\"}\n" +
       "- Minimal multi-attack formula:\n" +
-      "  {\"name\":\"Twin Sigil\",\"type\":\"weapon\",\"icon\":\"✧\",\"attacks\":[{\"name\":\"Sigil Strike\",\"formula\":\"1d8 + INT\"}]}\n" +
+      "  {\"name\":\"Twin Sigil\",\"type\":\"weapon\",\"icon\":\"✧\",\"attacks\":[{\"name\":\"Sigil Strike\",\"formula\":\"1d8 + INT\",\"description\":\"Focused arcane thrust.\"}]}\n" +
       "- Minimal charge-enabled multi-attack:\n" +
       "  {\"name\":\"Charge Wand\",\"type\":\"weapon\",\"icon\":\"⬡\",\"maxCharges\":5,\"attacks\":[{\"name\":\"Bolt\",\"formula\":\"1d6 + INT\",\"consumesCharge\":true}]}\n",
     template: [
@@ -1811,9 +1815,9 @@ export default function App() {
           { name: "Ember Shard", amount: 1, description: "Used in ritual crafting." },
         ],
         attacks: [
-          { name: "Slash", die: 8, stat: "PHYS", damageBonus: 0 },
-          { name: "Arcane Strike", formula: "1d6 + PHYS + INT + 2", consumesCharge: true },
-          { name: "Spellburst", die: 10, stat: "INT", damageBonus: 0, consumesCharge: true },
+          { name: "Slash", die: 8, stat: "PHYS", damageBonus: 0, description: "Reliable melee strike." },
+          { name: "Arcane Strike", formula: "1d6 + PHYS + INT + 2", consumesCharge: true, description: "Charged slash infused with arcane force." },
+          { name: "Spellburst", die: 10, stat: "INT", damageBonus: 0, consumesCharge: true, description: "High-output ranged burst." },
         ],
         description: "Slash is free. Arcane Strike and Spellburst cost a charge. Grants +2 PHYS and +2 AC while equipped.",
       },
@@ -1825,9 +1829,9 @@ export default function App() {
         maxCharges: 200,
         currentCharges: 150,
         attacks: [
-          { name: "Pulse Shot", formula: "2d4 + INT", consumesCharge: true },
-          { name: "Overdrive", formula: "3*(INT+PHYS) + 1d8", consumesCharge: true },
-          { name: "Buttstroke", die: 6, stat: "PHYS", damageBonus: 1 },
+          { name: "Pulse Shot", formula: "2d4 + INT", consumesCharge: true, description: "Standard capacitor discharge." },
+          { name: "Overdrive", formula: "3*(INT+PHYS) + 1d8", consumesCharge: true, description: "Burst fire mode that drains extra power." },
+          { name: "Buttstroke", die: 6, stat: "PHYS", damageBonus: 1, description: "Fallback melee strike that does not consume charge." },
         ],
         description: "High-capacity charge weapon showing large pools and mixed formula/legacy multi-attacks.",
       },
@@ -1880,9 +1884,10 @@ export default function App() {
       "- modifiers (array): optional list of { label: StatKey, value: string } applied to effective stats.\n" +
       "  value can be a number string (+1, -2) or a formula string (\"floor(level/2)\", \"INT\").\n" +
       "- actions (array): optional active rolls on the ability card.\n" +
-      "  Each action: { name, die?, stat?, formula?, damageBonus?, consumesTally? }.\n" +
+      "  Each action: { name, die?, stat?, formula?, damageBonus?, consumesTally?, description? }.\n" +
       "  Action must include formula OR (die and stat). formula takes precedence.\n" +
       "  consumesTally=true spends 1 tally use when the action successfully resolves.\n" +
+      "  description on an action is optional and displays under that specific action in the UI.\n" +
       "  If actions is missing or empty, the ability is treated as passive.\n" +
       "\nBehavior implemented by the app:\n" +
       "- tallyFormula is re-evaluated each render using current level and effective stats — dots update live.\n" +
@@ -1897,7 +1902,7 @@ export default function App() {
       "- Minimal tally formula ability:\n" +
       "  {\"name\":\"Battle Rhythm\",\"type\":\"Ability\",\"description\":\"...\",\"tallyFormula\":\"floor(level/2)\"}\n" +
       "- Minimal action ability:\n" +
-      "  {\"name\":\"Arc Sigil\",\"type\":\"Feat\",\"description\":\"...\",\"actions\":[{\"name\":\"Sigil Burst\",\"formula\":\"1d8 + INT\"}]}\n",
+      "  {\"name\":\"Arc Sigil\",\"type\":\"Feat\",\"description\":\"...\",\"actions\":[{\"name\":\"Sigil Burst\",\"formula\":\"1d8 + INT\",\"description\":\"Condensed blast of sigil force.\"}]}\n",
     template: [
       {
         name: "Veteran Instinct",
@@ -1911,7 +1916,7 @@ export default function App() {
         tallyFormula: "floor(level/2)",
         modifiers: [{ label: "CON", value: "floor(level/4)" }],
         actions: [
-          { name: "Precision Burst", formula: "1d8 + PHYS + INT", consumesTally: true },
+          { name: "Precision Burst", formula: "1d8 + PHYS + INT", consumesTally: true, description: "A focused strike that blends steel and spellwork." },
         ],
       },
     ],
@@ -1965,6 +1970,7 @@ export default function App() {
                     ...(action.formula !== undefined ? { formula: normalizeFormulaStatTokens(String(action.formula)) } : {}),
                     ...(action.damageBonus !== undefined ? { damageBonus: Number(action.damageBonus) || 0 } : {}),
                     ...(action.consumesTally !== undefined ? { consumesTally: Boolean(action.consumesTally) } : {}),
+                    ...(action.description !== undefined ? { description: String(action.description) } : {}),
                   } as AbilityAction;
                 }),
             }
@@ -2060,7 +2066,8 @@ export default function App() {
   const physAC = equippedItems.reduce((sum, item) => sum + (item.acBonus ?? 0), 0);
   const magicResist = equippedItems.reduce((sum, item) => sum + (item.magicResistBonus ?? 0), 0);
   const ac = physAC; // keep ac alias for attack applyDamage
-  const speed = 5 + equippedItems.reduce((sum, item) => sum + (item.speedBonus ?? 0), 0);
+  const baseSpeed = selectedClass === "Fighter" ? 3 : selectedClass === "Wizard" ? 2 : 0;
+  const speed = baseSpeed + equippedItems.reduce((sum, item) => sum + (item.speedBonus ?? 0), 0);
   const initiative = effectiveStats.PHYS;
   const levelNumber = level === "" ? 1 : Number(level);
   const fighterActionCount = selectedClass === "Fighter"
@@ -2680,36 +2687,55 @@ export default function App() {
                                 {chargeInputHints[String(normalizedWeapon.id)]}
                               </div>
                             ) : null}
-                            <div className="flex items-center gap-1">
-                              <button
-                                onClick={() => nudgeItemCharges(normalizedWeapon.id, -10)}
-                                className="px-2 py-0.5 text-[10px]"
-                                style={{ background: "#171208", border: "1px solid rgba(196,133,58,0.35)", borderRadius: 4, color: "#9a8a6a", fontFamily: "'JetBrains Mono', monospace", cursor: "pointer" }}
-                              >
-                                -10
-                              </button>
-                              <button
-                                onClick={() => nudgeItemCharges(normalizedWeapon.id, -1)}
-                                className="px-2 py-0.5 text-[10px]"
-                                style={{ background: "#171208", border: "1px solid rgba(196,133,58,0.35)", borderRadius: 4, color: "#9a8a6a", fontFamily: "'JetBrains Mono', monospace", cursor: "pointer" }}
-                              >
-                                -1
-                              </button>
-                              <button
-                                onClick={() => nudgeItemCharges(normalizedWeapon.id, 1)}
-                                className="px-2 py-0.5 text-[10px]"
-                                style={{ background: "#171208", border: "1px solid rgba(196,133,58,0.35)", borderRadius: 4, color: "#9a8a6a", fontFamily: "'JetBrains Mono', monospace", cursor: "pointer" }}
-                              >
-                                +1
-                              </button>
-                              <button
-                                onClick={() => nudgeItemCharges(normalizedWeapon.id, 10)}
-                                className="px-2 py-0.5 text-[10px]"
-                                style={{ background: "#171208", border: "1px solid rgba(196,133,58,0.35)", borderRadius: 4, color: "#9a8a6a", fontFamily: "'JetBrains Mono', monospace", cursor: "pointer" }}
-                              >
-                                +10
-                              </button>
-                            </div>
+                            {maxCharges > 20 ? (
+                              <div className="flex items-center gap-1">
+                                <button
+                                  onClick={() => nudgeItemCharges(normalizedWeapon.id, -10)}
+                                  className="px-2 py-0.5 text-[10px]"
+                                  style={{ background: "#171208", border: "1px solid rgba(196,133,58,0.35)", borderRadius: 4, color: "#9a8a6a", fontFamily: "'JetBrains Mono', monospace", cursor: "pointer" }}
+                                >
+                                  -10
+                                </button>
+                                <button
+                                  onClick={() => nudgeItemCharges(normalizedWeapon.id, -1)}
+                                  className="px-2 py-0.5 text-[10px]"
+                                  style={{ background: "#171208", border: "1px solid rgba(196,133,58,0.35)", borderRadius: 4, color: "#9a8a6a", fontFamily: "'JetBrains Mono', monospace", cursor: "pointer" }}
+                                >
+                                  -1
+                                </button>
+                                <button
+                                  onClick={() => nudgeItemCharges(normalizedWeapon.id, 1)}
+                                  className="px-2 py-0.5 text-[10px]"
+                                  style={{ background: "#171208", border: "1px solid rgba(196,133,58,0.35)", borderRadius: 4, color: "#9a8a6a", fontFamily: "'JetBrains Mono', monospace", cursor: "pointer" }}
+                                >
+                                  +1
+                                </button>
+                                <button
+                                  onClick={() => nudgeItemCharges(normalizedWeapon.id, 10)}
+                                  className="px-2 py-0.5 text-[10px]"
+                                  style={{ background: "#171208", border: "1px solid rgba(196,133,58,0.35)", borderRadius: 4, color: "#9a8a6a", fontFamily: "'JetBrains Mono', monospace", cursor: "pointer" }}
+                                >
+                                  +10
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="flex items-center gap-1">
+                                <button
+                                  onClick={() => nudgeItemCharges(normalizedWeapon.id, -1)}
+                                  className="px-2 py-0.5 text-[10px]"
+                                  style={{ background: "#171208", border: "1px solid rgba(196,133,58,0.35)", borderRadius: 4, color: "#9a8a6a", fontFamily: "'JetBrains Mono', monospace", cursor: "pointer" }}
+                                >
+                                  -1
+                                </button>
+                                <button
+                                  onClick={() => nudgeItemCharges(normalizedWeapon.id, 1)}
+                                  className="px-2 py-0.5 text-[10px]"
+                                  style={{ background: "#171208", border: "1px solid rgba(196,133,58,0.35)", borderRadius: 4, color: "#9a8a6a", fontFamily: "'JetBrains Mono', monospace", cursor: "pointer" }}
+                                >
+                                  +1
+                                </button>
+                              </div>
+                            )}
                           </div>
                         ) : (
                           <div className="mb-2">
@@ -2744,6 +2770,11 @@ export default function App() {
                                     ? attackPreview
                                     : `d${atk.die ?? "?"} + ${atk.stat ?? "?"}(${sv})${atk.damageBonus ? ` +${atk.damageBonus}` : ""}`}
                                 </div>
+                                {atk.description ? (
+                                  <div className="text-[10px] mt-0.5 italic" style={{ color: "#6a5a3a", fontFamily: "'Crimson Pro', serif" }}>
+                                    {atk.description}
+                                  </div>
+                                ) : null}
                               </button>
                             );
                           })}
@@ -2802,24 +2833,37 @@ export default function App() {
                               {chargeInputHints[String(normalizedWeapon.id)]}
                             </div>
                           ) : null}
-                          <div className="flex items-center gap-1">
-                            <button onClick={() => nudgeItemCharges(normalizedWeapon.id, -10)} className="px-2 py-0.5 text-[10px]"
-                              style={{ background: "#171208", border: "1px solid rgba(196,133,58,0.35)", borderRadius: 4, color: "#9a8a6a", fontFamily: "'JetBrains Mono', monospace", cursor: "pointer" }}>
-                              -10
-                            </button>
-                            <button onClick={() => nudgeItemCharges(normalizedWeapon.id, -1)} className="px-2 py-0.5 text-[10px]"
-                              style={{ background: "#171208", border: "1px solid rgba(196,133,58,0.35)", borderRadius: 4, color: "#9a8a6a", fontFamily: "'JetBrains Mono', monospace", cursor: "pointer" }}>
-                              -1
-                            </button>
-                            <button onClick={() => nudgeItemCharges(normalizedWeapon.id, 1)} className="px-2 py-0.5 text-[10px]"
-                              style={{ background: "#171208", border: "1px solid rgba(196,133,58,0.35)", borderRadius: 4, color: "#9a8a6a", fontFamily: "'JetBrains Mono', monospace", cursor: "pointer" }}>
-                              +1
-                            </button>
-                            <button onClick={() => nudgeItemCharges(normalizedWeapon.id, 10)} className="px-2 py-0.5 text-[10px]"
-                              style={{ background: "#171208", border: "1px solid rgba(196,133,58,0.35)", borderRadius: 4, color: "#9a8a6a", fontFamily: "'JetBrains Mono', monospace", cursor: "pointer" }}>
-                              +10
-                            </button>
-                          </div>
+                          {maxCharges > 20 ? (
+                            <div className="flex items-center gap-1">
+                              <button onClick={() => nudgeItemCharges(normalizedWeapon.id, -10)} className="px-2 py-0.5 text-[10px]"
+                                style={{ background: "#171208", border: "1px solid rgba(196,133,58,0.35)", borderRadius: 4, color: "#9a8a6a", fontFamily: "'JetBrains Mono', monospace", cursor: "pointer" }}>
+                                -10
+                              </button>
+                              <button onClick={() => nudgeItemCharges(normalizedWeapon.id, -1)} className="px-2 py-0.5 text-[10px]"
+                                style={{ background: "#171208", border: "1px solid rgba(196,133,58,0.35)", borderRadius: 4, color: "#9a8a6a", fontFamily: "'JetBrains Mono', monospace", cursor: "pointer" }}>
+                                -1
+                              </button>
+                              <button onClick={() => nudgeItemCharges(normalizedWeapon.id, 1)} className="px-2 py-0.5 text-[10px]"
+                                style={{ background: "#171208", border: "1px solid rgba(196,133,58,0.35)", borderRadius: 4, color: "#9a8a6a", fontFamily: "'JetBrains Mono', monospace", cursor: "pointer" }}>
+                                +1
+                              </button>
+                              <button onClick={() => nudgeItemCharges(normalizedWeapon.id, 10)} className="px-2 py-0.5 text-[10px]"
+                                style={{ background: "#171208", border: "1px solid rgba(196,133,58,0.35)", borderRadius: 4, color: "#9a8a6a", fontFamily: "'JetBrains Mono', monospace", cursor: "pointer" }}>
+                                +10
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-1">
+                              <button onClick={() => nudgeItemCharges(normalizedWeapon.id, -1)} className="px-2 py-0.5 text-[10px]"
+                                style={{ background: "#171208", border: "1px solid rgba(196,133,58,0.35)", borderRadius: 4, color: "#9a8a6a", fontFamily: "'JetBrains Mono', monospace", cursor: "pointer" }}>
+                                -1
+                              </button>
+                              <button onClick={() => nudgeItemCharges(normalizedWeapon.id, 1)} className="px-2 py-0.5 text-[10px]"
+                                style={{ background: "#171208", border: "1px solid rgba(196,133,58,0.35)", borderRadius: 4, color: "#9a8a6a", fontFamily: "'JetBrains Mono', monospace", cursor: "pointer" }}>
+                                +1
+                              </button>
+                            </div>
+                          )}
                         </div>
                       ) : (
                         <div className="mt-2">
@@ -3464,6 +3508,11 @@ export default function App() {
                                 <div className="text-[10px]" style={{ color: "#9a8a6a", fontFamily: "'JetBrains Mono', monospace" }}>
                                   {preview}
                                 </div>
+                                {action.description ? (
+                                  <div className="text-[10px] leading-tight mt-0.5 italic" style={{ color: "#6a5a3a", fontFamily: "'Crimson Pro', serif" }}>
+                                    {action.description}
+                                  </div>
+                                ) : null}
                               </button>
                             );
                           })}
@@ -3529,9 +3578,16 @@ export default function App() {
                       <div className="flex flex-wrap gap-1 px-3 pb-3">
                         {normalizedWeapon.attacks && normalizedWeapon.attacks.length > 0 ? (
                           normalizedWeapon.attacks.map((atk, j) => (
-                            <span key={j} className="text-[10px] px-2 py-0.5 rounded" style={{ background: "rgba(196,133,58,0.06)", border: "1px solid rgba(196,133,58,0.15)", color: "#6a5a3a", fontFamily: "'JetBrains Mono', monospace" }}>
-                              {atk.name}: {atk.formula ? atk.formula : `d${atk.die ?? "?"}+${atk.stat ?? "?"}`}{atk.consumesCharge ? " ⚡" : ""}
-                            </span>
+                            <div key={j} className="px-2 py-0.5 rounded" style={{ background: "rgba(196,133,58,0.06)", border: "1px solid rgba(196,133,58,0.15)", color: "#6a5a3a", fontFamily: "'JetBrains Mono', monospace" }}>
+                              <span className="text-[10px]" style={{ color: "#6a5a3a", fontFamily: "'JetBrains Mono', monospace" }}>
+                                {atk.name}: {atk.formula ? atk.formula : `d${atk.die ?? "?"}+${atk.stat ?? "?"}`}{atk.consumesCharge ? " ⚡" : ""}
+                              </span>
+                              {atk.description ? (
+                                <div className="text-[10px] leading-tight italic" style={{ color: "#6a5a3a", fontFamily: "'Crimson Pro', serif" }}>
+                                  {atk.description}
+                                </div>
+                              ) : null}
+                            </div>
                           ))
                         ) : normalizedWeapon.weaponFormula ? (
                           <span className="text-[10px] px-2 py-0.5 rounded" style={{ background: "rgba(196,133,58,0.06)", border: "1px solid rgba(196,133,58,0.15)", color: "#6a5a3a", fontFamily: "'JetBrains Mono', monospace" }}>
@@ -3583,10 +3639,12 @@ export default function App() {
                             </div>
                           ) : null}
                           <div className="flex items-center gap-1">
-                            <button onClick={() => nudgeItemCharges(normalizedWeapon.id, -10)} className="px-2 py-0.5 text-[10px]"
-                              style={{ background: "#171208", border: "1px solid rgba(196,133,58,0.35)", borderRadius: 4, color: "#9a8a6a", fontFamily: "'JetBrains Mono', monospace", cursor: "pointer" }}>
-                              -10
-                            </button>
+                            {maxCharges > 20 ? (
+                              <button onClick={() => nudgeItemCharges(normalizedWeapon.id, -10)} className="px-2 py-0.5 text-[10px]"
+                                style={{ background: "#171208", border: "1px solid rgba(196,133,58,0.35)", borderRadius: 4, color: "#9a8a6a", fontFamily: "'JetBrains Mono', monospace", cursor: "pointer" }}>
+                                -10
+                              </button>
+                            ) : null}
                             <button onClick={() => nudgeItemCharges(normalizedWeapon.id, -1)} className="px-2 py-0.5 text-[10px]"
                               style={{ background: "#171208", border: "1px solid rgba(196,133,58,0.35)", borderRadius: 4, color: "#9a8a6a", fontFamily: "'JetBrains Mono', monospace", cursor: "pointer" }}>
                               -1
@@ -3595,10 +3653,12 @@ export default function App() {
                               style={{ background: "#171208", border: "1px solid rgba(196,133,58,0.35)", borderRadius: 4, color: "#9a8a6a", fontFamily: "'JetBrains Mono', monospace", cursor: "pointer" }}>
                               +1
                             </button>
-                            <button onClick={() => nudgeItemCharges(normalizedWeapon.id, 10)} className="px-2 py-0.5 text-[10px]"
-                              style={{ background: "#171208", border: "1px solid rgba(196,133,58,0.35)", borderRadius: 4, color: "#9a8a6a", fontFamily: "'JetBrains Mono', monospace", cursor: "pointer" }}>
-                              +10
-                            </button>
+                            {maxCharges > 20 ? (
+                              <button onClick={() => nudgeItemCharges(normalizedWeapon.id, 10)} className="px-2 py-0.5 text-[10px]"
+                                style={{ background: "#171208", border: "1px solid rgba(196,133,58,0.35)", borderRadius: 4, color: "#9a8a6a", fontFamily: "'JetBrains Mono', monospace", cursor: "pointer" }}>
+                                +10
+                              </button>
+                            ) : null}
                           </div>
                         </div>
                       ) : (
@@ -4293,12 +4353,12 @@ export default function App() {
         <div className="fixed inset-0 flex items-center justify-center z-50" style={{ background: "rgba(0,0,0,0.75)" }} onClick={() => setImportJsonOpen(false)}>
           <div className="p-7 flex flex-col gap-4 w-full max-w-2xl" style={{ background: "#0e0c08", border: "1px solid rgba(196,133,58,0.4)", borderRadius: 8 }} onClick={(e) => e.stopPropagation()}>
             <div className="text-base font-bold" style={{ fontFamily: "'Cinzel', serif", color: "#c4853a" }}>Paste Scars & Feats JSON</div>
-            <p className="text-sm" style={{ color: "#9a8a6a", fontFamily: "'Crimson Pro', serif" }}>Supports <code style={{ color: "#c4853a" }}>tallyFormula</code>, formula <code style={{ color: "#c4853a" }}>modifiers</code>, and optional active <code style={{ color: "#c4853a" }}>actions</code>. If <code style={{ color: "#c4853a" }}>actions</code> is missing, the ability is treated as passive and shown as description-only. Copy template from Admin for full reference.</p>
+            <p className="text-sm" style={{ color: "#9a8a6a", fontFamily: "'Crimson Pro', serif" }}>Supports <code style={{ color: "#c4853a" }}>tallyFormula</code>, formula <code style={{ color: "#c4853a" }}>modifiers</code>, and optional active <code style={{ color: "#c4853a" }}>actions</code>. Action entries can include their own <code style={{ color: "#c4853a" }}>description</code>. If <code style={{ color: "#c4853a" }}>actions</code> is missing, the ability is treated as passive and shown as description-only. Copy template from Admin for full reference.</p>
             <textarea
               autoFocus
               value={importJsonText}
               onChange={(e) => setImportJsonText(e.target.value)}
-              placeholder='[{"name":"Veteran Instinct","type":"Feat","description":"You keep calm under pressure."},{"name":"Precision Burst","type":"Ability","description":"Focused burst of force.","tallyFormula":"floor(level/2)","actions":[{"name":"Burst","formula":"1d8 + PHYS + INT","consumesTally":true}]}]'
+              placeholder='[{"name":"Veteran Instinct","type":"Feat","description":"You keep calm under pressure."},{"name":"Precision Burst","type":"Ability","description":"Focused burst of force.","tallyFormula":"floor(level/2)","actions":[{"name":"Burst","formula":"1d8 + PHYS + INT","consumesTally":true,"description":"A short, controlled magical detonation."}]}]'
               rows={12}
               style={{ ...inputStyle, resize: "vertical" as const, minHeight: 220 }}
             />
@@ -4371,13 +4431,13 @@ export default function App() {
           <div className="p-7 flex flex-col gap-4 w-full max-w-2xl" style={{ background: "#0e0c08", border: "1px solid rgba(196,133,58,0.4)", borderRadius: 8 }} onClick={(e) => e.stopPropagation()}>
             <div className="text-base font-bold" style={{ fontFamily: "'Cinzel', serif", color: "#c4853a" }}>Paste Item JSON</div>
             <p className="text-sm" style={{ color: "#9a8a6a", fontFamily: "'Crimson Pro', serif" }}>
-              Paste one item object or an array of item objects. Supports stat bonuses (PHYS/CON/INT/SOC), speed, armor, and magic resist bonuses on any item type, plus legacy fields, formulas, multi-attacks, high charge pools, and custom icons.
+              Paste one item object or an array of item objects. Supports stat bonuses (PHYS/CON/INT/SOC), speed, armor, and magic resist bonuses on any item type, plus legacy fields, formulas, multi-attacks, per-attack descriptions, high charge pools, and custom icons.
             </p>
             <textarea
               autoFocus
               value={itemImportText}
               onChange={(e) => setItemImportText(e.target.value)}
-              placeholder='[{"name":"Battery Cannon","type":"weapon","icon":"⬡","slot":"weapon1","maxCharges":200,"currentCharges":150,"attacks":[{"name":"Pulse Shot","formula":"2d4 + INT","consumesCharge":true},{"name":"Overdrive","formula":"3*(INT+PHYS) + 1d8","consumesCharge":true}],"description":"High-capacity charge item."}]'
+              placeholder='[{"name":"Battery Cannon","type":"weapon","icon":"⬡","slot":"weapon1","maxCharges":200,"currentCharges":150,"attacks":[{"name":"Pulse Shot","formula":"2d4 + INT","consumesCharge":true,"description":"Standard capacitor discharge."},{"name":"Overdrive","formula":"3*(INT+PHYS) + 1d8","consumesCharge":true,"description":"Burst mode that burns extra charge."}],"description":"High-capacity charge item."}]'
               rows={12}
               style={{ ...inputStyle, resize: "vertical" as const, minHeight: 220 }}
             />
