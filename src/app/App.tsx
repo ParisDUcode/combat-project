@@ -421,6 +421,7 @@ export default function App() {
   const [portrait, setPortrait] = useState("");
   const [portraitInput, setPortraitInput] = useState("");
   const [portraitValid, setPortraitValid] = useState(false);
+  const [portraitError, setPortraitError] = useState("");
   const [selectedClass, setSelectedClass] = useState<ClassName | null>(null);
   const [level, setLevel] = useState<number | "">(1);
   const [xpDiamonds, setXpDiamonds] = useState(0);
@@ -1715,7 +1716,36 @@ export default function App() {
     setLongRestStep(null);
   };
 
-  const clearPortrait = () => { setPortrait(""); setPortraitInput(""); setPortraitValid(false); };
+  const clearPortrait = () => { setPortrait(""); setPortraitInput(""); setPortraitValid(false); setPortraitError(""); };
+
+  const handlePortraitFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith("image/")) {
+      setPortraitError("Selected file is not an image.");
+      e.currentTarget.value = "";
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = typeof reader.result === "string" ? reader.result : "";
+      if (!dataUrl) {
+        setPortraitError("Could not read image file.");
+        return;
+      }
+      setPortrait(dataUrl);
+      setPortraitInput("");
+      setPortraitValid(false);
+      setPortraitError("");
+    };
+    reader.onerror = () => {
+      setPortraitError("Could not read image file.");
+    };
+    reader.readAsDataURL(file);
+    e.currentTarget.value = "";
+  };
 
   // ─── Admin ────────────────────────────────────────────────────────────────
   const WEAPON_TEMPLATE = {
@@ -2347,7 +2377,8 @@ export default function App() {
               {portrait && (
                 <img src={portrait} alt="Character portrait" className="w-full h-full object-cover"
                   style={{ display: portraitValid ? "block" : "none" }}
-                  onLoad={() => setPortraitValid(true)} onError={() => setPortraitValid(false)}
+                  onLoad={() => { setPortraitValid(true); setPortraitError(""); }}
+                  onError={() => { setPortraitValid(false); setPortraitError("Image failed to load. Try a direct image URL or upload a local file."); }}
                 />
               )}
               {!portraitValid && (
@@ -2371,10 +2402,21 @@ export default function App() {
               {!portraitValid && (
                 <div className="absolute bottom-0 left-0 right-0" style={{ background: "rgba(10,8,6,0.85)", borderTop: "1px solid rgba(196,133,58,0.2)" }}>
                   <input value={portraitInput}
-                    onChange={(e) => { setPortraitInput(e.target.value); setPortrait(e.target.value.trim()); setPortraitValid(false); }}
+                    onChange={(e) => { setPortraitInput(e.target.value); setPortrait(e.target.value.trim()); setPortraitValid(false); setPortraitError(""); }}
                     placeholder="Image URL…" className="w-full px-2 py-1.5 text-xs outline-none bg-transparent"
                     style={{ color: "#9a8a6a", fontFamily: "'Cinzel', serif" }}
                   />
+                  <div className="px-2 pb-2 flex items-center justify-between gap-2">
+                    <label className="text-[10px] cursor-pointer" style={{ color: "#c4853a", fontFamily: "'Cinzel', serif" }}>
+                      Upload image
+                      <input type="file" accept="image/*" onChange={handlePortraitFile} style={{ display: "none" }} />
+                    </label>
+                    {portraitError && (
+                      <span className="text-[10px] text-right" style={{ color: "#c43a3a", fontFamily: "'Crimson Pro', serif" }}>
+                        {portraitError}
+                      </span>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
