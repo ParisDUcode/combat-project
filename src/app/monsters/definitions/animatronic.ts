@@ -12,6 +12,7 @@ export const animatronic: MonsterDefinition = {
   },
   hp: 16,
   ac: 4,
+  speed: 3,
   attacks: [
     {
       id: "animatronic-bite",

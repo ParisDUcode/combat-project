@@ -12,6 +12,7 @@ export const wolf: MonsterDefinition = {
   },
   hp: 6,
   ac: 2,
+  speed: 6,
   attacks: [
     {
       id: "wolf-bite",

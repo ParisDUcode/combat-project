@@ -12,6 +12,7 @@ export const akkiDemon: MonsterDefinition = {
   },
   hp: 6,
   ac: 1,
+  speed: 5,
   attacks: [
     {
       id: "akki-way-strike",

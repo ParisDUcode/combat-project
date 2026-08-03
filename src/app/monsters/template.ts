@@ -5,6 +5,7 @@ export const MONSTER_TEMPLATE_INSTRUCTIONS = [
   "Always keep stable id strings so encounter saves remain predictable.",
   "Attacks and abilities are stat-driven through formula.stat + formula.flatBonus.",
   "Use passive triggers for autonomous effects at encounter and turn checkpoints.",
+  "Include a speed value for every monster; it is shown in combat cards and represents basic movement.",
 ].join("\n");
 
 export const MONSTER_TEMPLATE: MonsterDefinition = {
@@ -19,6 +20,7 @@ export const MONSTER_TEMPLATE: MonsterDefinition = {
   },
   hp: 18,
   ac: 2,
+  speed: 5,
   attacks: [
     {
       id: "template-strike",

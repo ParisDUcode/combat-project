@@ -12,6 +12,7 @@ export const zombie: MonsterDefinition = {
   },
   hp: 5,
   ac: 4,
+  speed: 3,
   attacks: [
     {
       id: "zombie-slam",

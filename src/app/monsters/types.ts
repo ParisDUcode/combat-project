@@ -72,6 +72,7 @@ export interface MonsterDefinition {
   stats: MonsterStats;
   hp: number;
   ac: number;
+  speed: number;
   attacks: RollableAttack[];
   activeAbilities: ActiveAbility[];
   passiveAbilities: PassiveAbility[];
@@ -259,6 +260,8 @@ export const normalizeMonsterDefinition = (monster: unknown): MonsterDefinition 
     INT: intellect,
     SOC: social,
   };
+  const rawSpeed = (value as { speed?: unknown; spd?: unknown }).speed ?? (value as { spd?: unknown }).spd;
+  const speed = Math.max(0, Math.floor(toSafeNumber(rawSpeed, 0)));
 
   const attacks = Array.isArray(value.attacks)
     ? value.attacks.map(normalizeAttack).filter((attack): attack is RollableAttack => Boolean(attack))
@@ -271,6 +274,7 @@ export const normalizeMonsterDefinition = (monster: unknown): MonsterDefinition 
     stats,
     hp: Math.max(1, Math.floor(toSafeNumber(value.hp, 1))),
     ac: Math.max(0, Math.floor(toSafeNumber(value.ac, 0))),
+    speed,
     attacks,
     activeAbilities: Array.isArray(value.activeAbilities)
       ? value.activeAbilities.map(normalizeAbility).filter((ability): ability is ActiveAbility => Boolean(ability))

@@ -12,6 +12,7 @@ export const lowTierGoon: MonsterDefinition = {
   },
   hp: 4,
   ac: 1,
+  speed: 5,
   attacks: [
     {
       id: "goon-melee",

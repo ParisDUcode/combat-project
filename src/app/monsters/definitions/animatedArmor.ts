@@ -12,6 +12,7 @@ export const animatedArmor: MonsterDefinition = {
   },
   hp: 5,
   ac: 1,
+  speed: 5,
   attacks: [
     {
       id: "animated-armor-slam",
