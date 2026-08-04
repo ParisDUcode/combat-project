@@ -1914,61 +1914,60 @@ export default function App() {
   };
 
 
-  const ABILITY_TEMPLATE = {
-    __instructions: "Fields and semantics for abilities (Scars / Feats / Abilities):\n" +
-      "- name (string): display name.\n" +
-      "- type (Feat|Scar|Ability): category; affects color in the UI.\n" +
-      "- description (string): human-readable explanation; include mechanical context here.\n" +
-      "- tally (object): optional static charges/uses; provide { total: number }.\n" +
-      "- tallyFormula (string): optional dynamic formula for tally total. Overrides tally.total.\n" +
-      "  Supports: level, PHYS, CON, INT, SOC, floor(), ceil(), round(), max(), min(), abs(), +-*/.\n" +
-      "  Examples: \"level\", \"floor(level/2)\", \"level + INT\", \"max(1, level - 2)\".\n" +
-      "- modifiers (array): optional list of { label: StatKey, value: string } applied to effective stats.\n" +
-      "  value can be a number string (+1, -2) or a formula string (\"floor(level/2)\", \"INT\").\n" +
-      "- actions (array): optional active rolls on the ability card.\n" +
-      "  Each action: { name, die?, stat?, formula?, damageBonus?, consumesTally?, description? }.\n" +
-      "  Action must include formula OR (die and stat). formula takes precedence.\n" +
-      "  consumesTally=true spends 1 tally use when the action successfully resolves.\n" +
-      "  description on an action is optional and displays under that specific action in the UI.\n" +
-      "  If actions is missing or empty, the ability is treated as passive.\n" +
+  const SHARED_CONTENT_TEMPLATE = {
+    __instructions: "Fields and semantics for scars / feats / abilities / spells:\n" +
+      "- Use a single payload with two sections: abilities and spells.\n" +
+      "- abilities accepts Scars, Feats, and Abilities with type (Feat|Scar|Ability).\n" +
+      "- spells accepts spell-like entries with isSpell: true and optional spell-specific fields.\n" +
+      "- For abilities, support tallyFormula, modifiers, and actions just like the existing ability importer.\n" +
+      "- For spells, support damageDie, damageStat, statModifiers, slotCost, slotCostMax, and scaleDamageBySlots.\n" +
       "\nBehavior implemented by the app:\n" +
-      "- tallyFormula is re-evaluated each render using current level and effective stats — dots update live.\n" +
-      "- tally.used is clamped to computed total automatically on click.\n" +
-      "- modifiers with formula values are re-evaluated each render; displayed as +N STAT (formula).\n" +
-      "- modifiers add directly to corresponding effective stats (PHYS, CON, INT, SOC).\n" +
-      "- actions use the same roll grammar as weapons (stats, arithmetic, and NdM dice tokens).\n" +
-      "- Passive abilities (no actions) appear in Attacks and Equipment Abilities and Scars & Feats as description-only entries with no charges/action controls.\n" +
+      "- Spells are stored as ability-like entries with isSpell: true so they can share the same data model.\n" +
+      "- If slotCostMax is absent, the spell uses the fixed slotCost. If slotCostMax is present, the player can choose a value between slotCost and slotCostMax.\n" +
       "\nSTRICT MINIMAL VALID OUTPUTS:\n" +
-      "- Minimal passive ability (no actions):\n" +
-      "  {\"name\":\"Veteran\",\"type\":\"Feat\",\"description\":\"...\"}\n" +
-      "- Minimal tally formula ability:\n" +
-      "  {\"name\":\"Battle Rhythm\",\"type\":\"Ability\",\"description\":\"...\",\"tallyFormula\":\"floor(level/2)\"}\n" +
-      "- Minimal action ability:\n" +
-      "  {\"name\":\"Arc Sigil\",\"type\":\"Feat\",\"description\":\"...\",\"actions\":[{\"name\":\"Sigil Burst\",\"formula\":\"1d8 + INT\",\"description\":\"Condensed blast of sigil force.\"}]}\n",
-    template: [
-      {
-        name: "Veteran Instinct",
-        type: "Feat",
-        description: "A passive edge that sharpens your battlefield awareness.",
-      },
-      {
-        name: "Ability Name",
-        type: "Feat",
-        description: "Describe what this ability does.",
-        tallyFormula: "floor(level/2)",
-        modifiers: [{ label: "CON", value: "floor(level/4)" }],
-        actions: [
-          { name: "Precision Burst", formula: "1d8 + PHYS + INT", consumesTally: true, description: "A focused strike that blends steel and spellwork." },
-        ],
-      },
-    ],
+      "- Minimal shared payload:\n" +
+      "  {\"abilities\":[{\"name\":\"Veteran\",\"type\":\"Feat\",\"description\":\"...\"}],\"spells\":[{\"name\":\"Spark\",\"type\":\"Ability\",\"isSpell\":true,\"description\":\"Quick magical strike.\",\"damageDie\":4,\"damageStat\":\"INT\",\"slotCost\":2,\"scaleDamageBySlots\":true}]}\n",
+    template: {
+      abilities: [
+        {
+          name: "Veteran Instinct",
+          type: "Feat",
+          description: "A passive edge that sharpens your battlefield awareness.",
+        },
+        {
+          name: "Ability Name",
+          type: "Feat",
+          description: "Describe what this ability does.",
+          tallyFormula: "floor(level/2)",
+          modifiers: [{ label: "CON", value: "floor(level/4)" }],
+          actions: [
+            { name: "Precision Burst", formula: "1d8 + PHYS + INT", consumesTally: true, description: "A focused strike that blends steel and spellwork." },
+          ],
+        },
+      ],
+      spells: [
+        {
+          name: "Spell Name",
+          type: "Ability",
+          isSpell: true,
+          description: "Describe what this spell does.",
+          damageDie: 6,
+          damageStat: "INT",
+          slotCost: 2,
+          slotCostMax: 3,
+          scaleDamageBySlots: true,
+          statModifiers: [{ label: "PHYS", value: "+1" }],
+        },
+      ],
+    },
   };
-  const downloadAbilityTemplate = async () => {
+
+  const downloadSharedContentTemplate = async () => {
     try {
-      await navigator.clipboard.writeText(JSON.stringify(ABILITY_TEMPLATE, null, 2));
+      await navigator.clipboard.writeText(JSON.stringify(SHARED_CONTENT_TEMPLATE, null, 2));
     } catch {
       const t = document.createElement("textarea");
-      t.value = JSON.stringify(ABILITY_TEMPLATE, null, 2);
+      t.value = JSON.stringify(SHARED_CONTENT_TEMPLATE, null, 2);
       document.body.appendChild(t);
       t.select();
       document.execCommand("copy");
@@ -1977,13 +1976,28 @@ export default function App() {
     setAdminOpen(false);
   };
 
-  const importAbilitiesFromText = () => {
+  const importSharedContentFromText = (text: string) => {
     try {
-      const data = JSON.parse(importJsonText);
-      const items: Ability[] = (Array.isArray(data) ? data : [data]).map((a: any, i: number) => ({
+      const payload = JSON.parse(text);
+      const abilityEntries = Array.isArray(payload?.abilities)
+        ? payload.abilities
+        : Array.isArray(payload)
+          ? payload.filter((entry: any) => !entry?.isSpell && !(entry?.damageDie !== undefined || entry?.damageStat !== undefined || entry?.slotCost !== undefined || entry?.slotCostMax !== undefined || entry?.scaleDamageBySlots !== undefined))
+          : Array.isArray(payload?.template?.abilities)
+            ? payload.template.abilities
+            : [payload];
+      const spellEntries = Array.isArray(payload?.spells)
+        ? payload.spells
+        : Array.isArray(payload)
+          ? payload.filter((entry: any) => Boolean(entry?.isSpell) || entry?.damageDie !== undefined || entry?.damageStat !== undefined || entry?.slotCost !== undefined || entry?.slotCostMax !== undefined || entry?.scaleDamageBySlots !== undefined)
+          : Array.isArray(payload?.template?.spells)
+            ? payload.template.spells
+            : [];
+
+      const importedAbilities: Ability[] = abilityEntries.map((a: any, i: number) => ({
         id: nextAbilityId + i,
         name: a.name ?? "Unnamed",
-        type: (["Feat","Scar","Ability"].includes(a.type) ? a.type : "Ability") as AbilityType,
+        type: (["Feat", "Scar", "Ability"].includes(a.type) ? a.type : "Ability") as AbilityType,
         description: a.description ?? "",
         ...(a.tallyFormula ? { tallyFormula: String(a.tallyFormula), tally: { total: 1, used: 0 } } : a.tally ? { tally: { total: Number(a.tally.total) || 1, used: 0 } } : {}),
         ...(Array.isArray(a.modifiers)
@@ -2018,55 +2032,7 @@ export default function App() {
             }
           : {}),
       }));
-      setAbilities((prev) => [...prev, ...items]);
-      setNextAbilityId((n) => n + items.length);
-      setImportJsonText("");
-      setImportJsonOpen(false);
-      setAdminOpen(false);
-    } catch {}
-  };
-
-  // ─── Spells ──────────────────────────────────────────────────────────────
-  const SPELL_TEMPLATE = {
-    __instructions: "Spells are just abilities with a spell marker.\n" +
-      "- Use type: \"Ability\" and isSpell: true for spell entries.\n" +
-      "- name (string): display name.\n" +
-      "- description (string): human-readable description and mechanical notes.\n" +
-      "- damageDie (number): if present, the spell deals roll(damageDie) + spell stat damage.\n" +
-      "- damageStat (StatKey): stat added to damage when damageDie is present.\n" +
-      "- statModifiers (array): optional list of { label: StatKey, value: \"+N\" } that modify stats.\n" +
-      "- slotCost (number): fixed spell-slot cost used when casting.\n" +
-      "- slotCostMax (number): optional maximum slot count when the player may choose how many slots to spend.\n" +
-      "- scaleDamageBySlots (boolean): if true, each extra spell slot adds another damage die roll.\n" +
-      "\nBehavior implemented by the app:\n" +
-      "- If slotCostMax is absent, the spell uses the fixed slotCost. If slotCostMax is present, the player can choose a value between slotCost and slotCostMax.\n" +
-      "\nSTRICT MINIMAL VALID OUTPUTS:\n" +
-      "- Minimal utility spell:\n" +
-      "  {\"name\":\"Light\",\"type\":\"Ability\",\"isSpell\":true,\"description\":\"Create a small magical light.\"}\n" +
-      "- Minimal damage spell:\n" +
-      "  {\"name\":\"Spark\",\"type\":\"Ability\",\"isSpell\":true,\"description\":\"Quick magical strike.\",\"damageDie\":4,\"damageStat\":\"INT\",\"slotCost\":2,\"scaleDamageBySlots\":true}\n",
-    template: [
-      { name: "Spell Name", type: "Ability", isSpell: true, description: "Describe what this spell does.", damageDie: 6, damageStat: "INT", slotCost: 2, slotCostMax: 3, scaleDamageBySlots: true, statModifiers: [{ label: "PHYS", value: "+1" }] },
-    ],
-  };
-  const downloadSpellTemplate = async () => {
-    try {
-      await navigator.clipboard.writeText(JSON.stringify(SPELL_TEMPLATE, null, 2));
-    } catch {
-      const t = document.createElement("textarea");
-      t.value = JSON.stringify(SPELL_TEMPLATE, null, 2);
-      document.body.appendChild(t);
-      t.select();
-      document.execCommand("copy");
-      document.body.removeChild(t);
-    }
-    setAdminOpen(false);
-  };
-
-  const importSpellsFromText = () => {
-    try {
-      const data = JSON.parse(importSpellJsonText);
-      const items: Spell[] = (Array.isArray(data) ? data : [data]).map((s: any, i: number) => ({
+      const importedSpells: Spell[] = spellEntries.map((s: any, i: number) => ({
         id: nextSpellId + i,
         name: s.name ?? "Unnamed Spell",
         type: "Ability" as AbilityType,
@@ -2088,13 +2054,21 @@ export default function App() {
         ...(s.slotCostMax !== undefined ? { slotCostMax: Math.max(1, Number(s.slotCostMax) || 1) } : {}),
         ...(s.scaleDamageBySlots !== undefined ? { scaleDamageBySlots: Boolean(s.scaleDamageBySlots) } : {}),
       }));
-      setSpells((prev) => [...prev, ...items]);
-      setNextSpellId((n) => n + items.length);
+
+      setAbilities((prev) => [...prev, ...importedAbilities]);
+      setNextAbilityId((n) => n + importedAbilities.length);
+      setSpells((prev) => [...prev, ...importedSpells]);
+      setNextSpellId((n) => n + importedSpells.length);
+      setImportJsonText("");
+      setImportJsonOpen(false);
       setImportSpellJsonText("");
       setImportSpellJsonOpen(false);
       setAdminOpen(false);
     } catch {}
   };
+
+  const importAbilitiesFromText = () => importSharedContentFromText(importJsonText);
+  const importSpellsFromText = () => importSharedContentFromText(importSpellJsonText);
 
   const castSpell = (spell: Spell, slotCount: number) => {
     const minCost = Math.max(1, spell.slotCost ?? 1);
@@ -2280,38 +2254,21 @@ export default function App() {
                 Copy Monster Template
               </button>
               <div className="px-4 py-2 mt-1" style={{ borderTop: "1px solid rgba(196,133,58,0.08)" }}>
-                <span className="text-xs uppercase tracking-widest" style={{ color: "#6a5a3a", fontFamily: "'Cinzel', serif" }}>Scars & Feats</span>
+                <span className="text-xs uppercase tracking-widest" style={{ color: "#6a5a3a", fontFamily: "'Cinzel', serif" }}>Scars, Feats & Spells</span>
               </div>
               <button
-                onClick={downloadAbilityTemplate}
+                onClick={downloadSharedContentTemplate}
                 className="text-left px-4 py-2.5 text-sm hover:opacity-80 transition-opacity"
                 style={{ fontFamily: "'Crimson Pro', serif", color: "#e2cfa0", background: "none", border: "none", cursor: "pointer" }}
               >
-                Copy Scars & Feats Template
+                Copy Shared Content Template
               </button>
               <button
                 onClick={() => { setImportJsonText(""); setImportJsonOpen(true); setAdminOpen(false); }}
                 className="text-left px-4 py-2.5 text-sm hover:opacity-80 transition-opacity"
                 style={{ fontFamily: "'Crimson Pro', serif", color: "#e2cfa0", background: "none", border: "none", cursor: "pointer" }}
               >
-                Paste Scars & Feats JSON
-              </button>
-              <div className="px-4 py-2 mt-1" style={{ borderTop: "1px solid rgba(196,133,58,0.08)" }}>
-                <span className="text-xs uppercase tracking-widest" style={{ color: "#6a5a3a", fontFamily: "'Cinzel', serif" }}>Spells</span>
-              </div>
-              <button
-                onClick={downloadSpellTemplate}
-                className="text-left px-4 py-2.5 text-sm hover:opacity-80 transition-opacity"
-                style={{ fontFamily: "'Crimson Pro', serif", color: "#e2cfa0", background: "none", border: "none", cursor: "pointer" }}
-              >
-                Copy Spell Template
-              </button>
-              <button
-                onClick={() => { setImportSpellJsonText(""); setImportSpellJsonOpen(true); setAdminOpen(false); }}
-                className="text-left px-4 py-2.5 text-sm hover:opacity-80 transition-opacity"
-                style={{ fontFamily: "'Crimson Pro', serif", color: "#e2cfa0", background: "none", border: "none", cursor: "pointer" }}
-              >
-                Add Spell
+                Paste Shared Content JSON
               </button>
             </div>
           )}
@@ -3074,11 +3031,11 @@ export default function App() {
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-sm font-bold" style={{ fontFamily: "'Cinzel', serif", color: "#e2cfa0" }}>Spells</span>
                     <button
-                      onClick={() => { setImportSpellJsonText(""); setImportSpellJsonOpen(true); }}
+                      onClick={() => { setImportJsonText(""); setImportJsonOpen(true); }}
                       className="px-2 py-0.5 text-[8px] uppercase tracking-widest transition-all hover:opacity-90"
                       style={{ background: "rgba(106,154,224,0.12)", border: "1px solid rgba(106,154,224,0.3)", borderRadius: 3, color: "#6a9ae0", fontFamily: "'Cinzel', serif", cursor: "pointer", fontSize: 9 }}
                     >
-                      + Add
+                      + Import
                     </button>
                   </div>
                   <div className="flex flex-col gap-2">
@@ -4443,17 +4400,17 @@ export default function App() {
         </div>
       )}
 
-      {/* Paste Scars & Feats JSON Modal */}
+      {/* Paste Shared Content JSON Modal */}
       {importJsonOpen && (
         <div className="fixed inset-0 flex items-center justify-center z-50" style={{ background: "rgba(0,0,0,0.75)" }} onClick={() => setImportJsonOpen(false)}>
           <div className="p-7 flex flex-col gap-4 w-full max-w-2xl" style={{ background: "#0e0c08", border: "1px solid rgba(196,133,58,0.4)", borderRadius: 8 }} onClick={(e) => e.stopPropagation()}>
-            <div className="text-base font-bold" style={{ fontFamily: "'Cinzel', serif", color: "#c4853a" }}>Paste Scars & Feats JSON</div>
-            <p className="text-sm" style={{ color: "#9a8a6a", fontFamily: "'Crimson Pro', serif" }}>Supports <code style={{ color: "#c4853a" }}>tallyFormula</code>, formula <code style={{ color: "#c4853a" }}>modifiers</code>, and optional active <code style={{ color: "#c4853a" }}>actions</code>. Action entries can include their own <code style={{ color: "#c4853a" }}>description</code>. If <code style={{ color: "#c4853a" }}>actions</code> is missing, the ability is treated as passive and shown as description-only. Copy template from Admin for full reference.</p>
+            <div className="text-base font-bold" style={{ fontFamily: "'Cinzel', serif", color: "#c4853a" }}>Paste Shared Content JSON</div>
+            <p className="text-sm" style={{ color: "#9a8a6a", fontFamily: "'Crimson Pro', serif" }}>Supports scars, feats, abilities, and spells in one payload. Use the shared template from Admin for full reference. Ability entries can use <code style={{ color: "#c4853a" }}>tallyFormula</code>, <code style={{ color: "#c4853a" }}>modifiers</code>, and <code style={{ color: "#c4853a" }}>actions</code>. Spell entries use <code style={{ color: "#c4853a" }}>isSpell</code> plus optional <code style={{ color: "#c4853a" }}>damageDie</code>, <code style={{ color: "#c4853a" }}>damageStat</code>, <code style={{ color: "#c4853a" }}>slotCost</code>, and <code style={{ color: "#c4853a" }}>scaleDamageBySlots</code>.</p>
             <textarea
               autoFocus
               value={importJsonText}
               onChange={(e) => setImportJsonText(e.target.value)}
-              placeholder='[{"name":"Veteran Instinct","type":"Feat","description":"You keep calm under pressure."},{"name":"Precision Burst","type":"Ability","description":"Focused burst of force.","tallyFormula":"floor(level/2)","actions":[{"name":"Burst","formula":"1d8 + PHYS + INT","consumesTally":true,"description":"A short, controlled magical detonation."}]}]'
+              placeholder='{"abilities":[{"name":"Veteran Instinct","type":"Feat","description":"You keep calm under pressure."}],"spells":[{"name":"Spark","type":"Ability","isSpell":true,"description":"Quick magical strike.","damageDie":4,"damageStat":"INT","slotCost":2,"scaleDamageBySlots":true}]}'
               rows={12}
               style={{ ...inputStyle, resize: "vertical" as const, minHeight: 220 }}
             />
