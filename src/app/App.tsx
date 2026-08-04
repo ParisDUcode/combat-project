@@ -2075,7 +2075,10 @@ export default function App() {
 
   const castSpell = (spell: Spell, slotCount: number) => {
     const minCost = Math.max(1, spell.slotCost ?? 1);
-    const maxCost = Math.max(minCost, spell.slotCostMax ?? minCost);
+    const maxCost = Math.max(
+      minCost,
+      spell.slotCostMax ?? (spell.scaleDamageBySlots ? wizardSpellSlots : minCost),
+    );
     const selectedSlotCount = Math.max(minCost, Math.min(slotCount, Math.min(wizardSpellSlots, maxCost)));
 
     if (selectedSlotCount > wizardSpellSlots) {
@@ -3050,8 +3053,22 @@ export default function App() {
                     {spells.length === 0 && (
                       <p className="text-[10px] italic" style={{ color: "#3a3020", fontFamily: "'Crimson Pro', serif" }}>No spells yet.</p>
                     )}
-                    {spells.map((spell) => (
-                      <div key={spell.id} style={{ background: "rgba(106,154,224,0.08)", border: "1px solid rgba(106,154,224,0.2)", borderRadius: 4, padding: "8px 10px", overflow: "hidden" }}>
+                    {spells.map((spell) => {
+                      const minSlotCost = Math.max(1, spell.slotCost ?? 1);
+                      const maxSelectableSlotCost = Math.max(
+                        minSlotCost,
+                        Math.min(
+                          wizardSpellSlots,
+                          spell.slotCostMax ?? (spell.scaleDamageBySlots ? wizardSpellSlots : minSlotCost),
+                        ),
+                      );
+                      const selectedSpellSlot = Math.max(
+                        minSlotCost,
+                        Math.min(spellSlotSelections[spell.id] ?? minSlotCost, maxSelectableSlotCost),
+                      );
+                      const canChooseSlots = maxSelectableSlotCost > minSlotCost;
+
+                      return (<div key={spell.id} style={{ background: "rgba(106,154,224,0.08)", border: "1px solid rgba(106,154,224,0.2)", borderRadius: 4, padding: "8px 10px", overflow: "hidden" }}>
                         <div className="flex items-center justify-between gap-2">
                           <div className="flex-1">
                             <div className="text-xs font-semibold" style={{ fontFamily: "'Cinzel', serif", color: "#e2cfa0" }}>{spell.name}</div>
@@ -3067,27 +3084,27 @@ export default function App() {
                         <div className="flex flex-wrap gap-1 mt-2">
                           <div className="flex items-center gap-1">
                             <span className="text-[9px]" style={{ color: "#6a9ae0", fontFamily: "'Cinzel', serif" }}>Slots</span>
-                            {spell.slotCostMax !== undefined && spell.slotCostMax > (spell.slotCost ?? 1) ? (
+                            {canChooseSlots ? (
                               <select
-                                value={spellSlotSelections[spell.id] ?? Math.max(1, spell.slotCost ?? 1)}
+                                value={selectedSpellSlot}
                                 onChange={(e) => setSpellSlotSelections((prev) => ({ ...prev, [spell.id]: Number(e.target.value) }))}
                                 className="text-[9px] px-1.5 py-0.5 rounded"
                                 style={{ background: "rgba(106,154,224,0.08)", border: "1px solid rgba(106,154,224,0.2)", color: "#e2cfa0", fontFamily: "'JetBrains Mono', monospace" }}
                               >
-                                {Array.from({ length: Math.max(1, Math.min(wizardSpellSlots, spell.slotCostMax ?? 1) - Math.max(1, spell.slotCost ?? 1) + 1) }, (_, index) => {
-                                  const value = Math.max(1, spell.slotCost ?? 1) + index;
+                                {Array.from({ length: maxSelectableSlotCost - minSlotCost + 1 }, (_, index) => {
+                                  const value = minSlotCost + index;
                                   return <option key={value} value={value}>{value}</option>;
                                 })}
                               </select>
                             ) : (
                               <span className="text-[9px] px-1.5 py-0.5 rounded" style={{ background: "rgba(106,154,224,0.06)", border: "1px solid rgba(106,154,224,0.2)", color: "#e2cfa0", fontFamily: "'JetBrains Mono', monospace" }}>
-                                {spell.slotCost ?? 1}
+                                {minSlotCost}
                               </span>
                             )}
                           </div>
                           {spell.damageDie !== undefined && (
                             <button
-                              onClick={() => castSpell(spell, spellSlotSelections[spell.id] ?? Math.max(1, spell.slotCost ?? 1))}
+                              onClick={() => castSpell(spell, selectedSpellSlot)}
                               className="text-[10px] px-2 py-0.5 rounded transition-all hover:opacity-90 active:scale-95 font-semibold"
                               style={{ background: "rgba(106,154,224,0.2)", border: "1px solid rgba(106,154,224,0.4)", color: "#6a9ae0", fontFamily: "'Cinzel', serif", cursor: "pointer" }}
                             >
@@ -3104,8 +3121,8 @@ export default function App() {
                             </>
                           )}
                         </div>
-                      </div>
-                    ))}
+                      </div>);
+                    })}
                   </div>
                 </div>
               </div>
