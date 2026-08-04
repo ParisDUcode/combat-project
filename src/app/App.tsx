@@ -1921,12 +1921,15 @@ export default function App() {
       "- spells accepts spell-like entries with isSpell: true and optional spell-specific fields.\n" +
       "- For abilities, support tallyFormula, modifiers, and actions just like the existing ability importer.\n" +
       "- For spells, support damageDie, damageStat, statModifiers, slotCost, slotCostMax, and scaleDamageBySlots.\n" +
+      "- A spell can use just damageDie if you want a die-only effect with no extra stat bonus; damageStat is optional.\n" +
       "\nBehavior implemented by the app:\n" +
       "- Spells are stored as ability-like entries with isSpell: true so they can share the same data model.\n" +
       "- If slotCostMax is absent, the spell uses the fixed slotCost. If slotCostMax is present, the player can choose a value between slotCost and slotCostMax.\n" +
+      "- Die-only spells still cast normally; when damageStat is absent, the roll is just the damage die result.\n" +
       "\nSTRICT MINIMAL VALID OUTPUTS:\n" +
       "- Minimal shared payload:\n" +
-      "  {\"abilities\":[{\"name\":\"Veteran\",\"type\":\"Feat\",\"description\":\"...\"}],\"spells\":[{\"name\":\"Spark\",\"type\":\"Ability\",\"isSpell\":true,\"description\":\"Quick magical strike.\",\"damageDie\":4,\"damageStat\":\"INT\",\"slotCost\":2,\"scaleDamageBySlots\":true}]}\n",
+      "  {\"abilities\":[{\"name\":\"Veteran\",\"type\":\"Feat\",\"description\":\"...\"}],\"spells\":[{\"name\":\"Spark\",\"type\":\"Ability\",\"isSpell\":true,\"description\":\"Quick magical strike.\",\"damageDie\":4,\"damageStat\":\"INT\",\"slotCost\":2,\"scaleDamageBySlots\":true}]}\n" +
+      "- Die-only example: {\"spells\":[{\"name\":\"Burst\",\"type\":\"Ability\",\"isSpell\":true,\"description\":\"A simple blast.\",\"damageDie\":12,\"slotCost\":2,\"scaleDamageBySlots\":true}]}\n",
     template: {
       abilities: [
         {
