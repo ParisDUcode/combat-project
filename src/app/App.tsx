@@ -2082,13 +2082,18 @@ export default function App() {
 
     setWizardSpellSlots((current) => Math.max(0, current - selectedSlotCount));
 
-    if (spell.damageDie && spell.damageStat) {
+    if (spell.damageDie !== undefined) {
       const damageRolls = spell.scaleDamageBySlots ? selectedSlotCount : 1;
       let totalRoll = 0;
       for (let i = 0; i < damageRolls; i += 1) totalRoll += rollD(spell.damageDie);
-      const stat = effectiveStats[spell.damageStat];
-      const damage = totalRoll + stat;
-      addLog(`✨ ${spell.name} — ${selectedSlotCount} slot${selectedSlotCount > 1 ? "s" : ""}; ${damageRolls}d${spell.damageDie}(${totalRoll}) + ${spell.damageStat}(${stat}) = ${damage} damage dealt`, "info");
+      const statBonus = spell.damageStat ? effectiveStats[spell.damageStat] : 0;
+      const damage = totalRoll + statBonus;
+
+      if (spell.damageStat) {
+        addLog(`✨ ${spell.name} — ${selectedSlotCount} slot${selectedSlotCount > 1 ? "s" : ""}; ${damageRolls}d${spell.damageDie}(${totalRoll}) + ${spell.damageStat}(${statBonus}) = ${damage} damage dealt`, "info");
+      } else {
+        addLog(`✨ ${spell.name} — ${selectedSlotCount} slot${selectedSlotCount > 1 ? "s" : ""}; ${damageRolls}d${spell.damageDie}(${totalRoll}) = ${damage} damage dealt`, "info");
+      }
     } else {
       addLog(`✨ Cast ${spell.name} using ${selectedSlotCount} slot${selectedSlotCount > 1 ? "s" : ""}`, "info");
     }
@@ -3077,13 +3082,13 @@ export default function App() {
                               </span>
                             )}
                           </div>
-                          {spell.damageDie && spell.damageStat && (
+                          {spell.damageDie !== undefined && (
                             <button
                               onClick={() => castSpell(spell, spellSlotSelections[spell.id] ?? Math.max(1, spell.slotCost ?? 1))}
                               className="text-[10px] px-2 py-0.5 rounded transition-all hover:opacity-90 active:scale-95 font-semibold"
                               style={{ background: "rgba(106,154,224,0.2)", border: "1px solid rgba(106,154,224,0.4)", color: "#6a9ae0", fontFamily: "'Cinzel', serif", cursor: "pointer" }}
                             >
-                              Cast ({spell.damageStat}d{spell.damageDie})
+                              Cast ({spell.damageStat ? `${spell.damageStat}d${spell.damageDie}` : `d${spell.damageDie}`})
                             </button>
                           )}
                           {spell.statModifiers && spell.statModifiers.length > 0 && (
