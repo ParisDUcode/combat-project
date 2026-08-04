@@ -62,13 +62,14 @@ interface Ability {
 const isPassiveAbility = (ability: Ability | null | undefined): boolean =>
   !ability?.actions || ability.actions.length === 0;
 
-interface Spell {
-  id: number;
-  name: string;
-  description: string;
+interface Spell extends Ability {
+  isSpell: true;
   damageDie?: number;
   damageStat?: StatKey;
   statModifiers?: AbilityModifier[];
+  slotCost?: number;
+  slotCostMax?: number;
+  scaleDamageBySlots?: boolean;
 }
 
 interface SacrificeReward {
@@ -445,6 +446,7 @@ export default function App() {
   const [nextSpellId, setNextSpellId] = useState(1);
   const [importSpellJsonText, setImportSpellJsonText] = useState("");
   const [importSpellJsonOpen, setImportSpellJsonOpen] = useState(false);
+  const [spellSlotSelections, setSpellSlotSelections] = useState<Record<number, number>>({});
   const [characterLoadJsonText, setCharacterLoadJsonText] = useState("");
   const [characterLoadJsonOpen, setCharacterLoadJsonOpen] = useState(false);
 
@@ -546,6 +548,7 @@ export default function App() {
       nextSpellId,
       importSpellJsonText,
       importSpellJsonOpen,
+      spellSlotSelections,
       characterLoadJsonText,
       characterLoadJsonOpen,
       selectedItem,
@@ -618,17 +621,25 @@ export default function App() {
         : {}),
     });
 
-    const normalizeLoadedSpell = (spell: Spell): Spell => ({
-      ...spell,
-      ...(canonicalStatKey(spell.damageStat) ? { damageStat: canonicalStatKey(spell.damageStat) as StatKey } : {}),
-      ...(Array.isArray(spell.statModifiers)
+    const normalizeLoadedSpell = (spell: Partial<Spell> | any): Spell => ({
+      id: Number(spell?.id) || 0,
+      name: typeof spell?.name === "string" ? spell.name : "Unnamed Spell",
+      type: "Ability" as AbilityType,
+      description: typeof spell?.description === "string" ? spell.description : "",
+      isSpell: true,
+      ...(spell?.damageDie !== undefined ? { damageDie: Number(spell.damageDie) } : {}),
+      ...(canonicalStatKey(spell?.damageStat) ? { damageStat: canonicalStatKey(spell.damageStat) as StatKey } : {}),
+      ...(Array.isArray(spell?.statModifiers)
         ? {
-            statModifiers: spell.statModifiers.map((modifier) => ({
+            statModifiers: spell.statModifiers.map((modifier: AbilityModifier) => ({
               ...modifier,
               label: canonicalStatKey(modifier.label) ?? modifier.label,
             })),
           }
         : {}),
+      ...(spell?.slotCost !== undefined ? { slotCost: Math.max(1, Number(spell.slotCost) || 1) } : {}),
+      ...(spell?.slotCostMax !== undefined ? { slotCostMax: Math.max(1, Number(spell.slotCostMax) || 1) } : {}),
+      ...(spell?.scaleDamageBySlots !== undefined ? { scaleDamageBySlots: Boolean(spell.scaleDamageBySlots) } : {}),
     });
 
     const normalizeJournalEntries = (raw: any): JournalEntry[] => {
@@ -700,6 +711,7 @@ export default function App() {
     }
     if (d.nextAbilityId !== undefined) setNextAbilityId(d.nextAbilityId);
     if (d.wizardSpellSlots !== undefined) setWizardSpellSlots(d.wizardSpellSlots);
+    if (d.spellSlotSelections !== undefined) setSpellSlotSelections(d.spellSlotSelections);
     if (d.spells !== undefined) {
       const loadedSpells = Array.isArray(d.spells) ? d.spells : [];
       setSpells(loadedSpells.map((spell: Spell) => normalizeLoadedSpell(spell)));
@@ -2016,21 +2028,25 @@ export default function App() {
 
   // ─── Spells ──────────────────────────────────────────────────────────────
   const SPELL_TEMPLATE = {
-    __instructions: "Fields and semantics for spells:\n" +
+    __instructions: "Spells are just abilities with a spell marker.\n" +
+      "- Use type: \"Ability\" and isSpell: true for spell entries.\n" +
       "- name (string): display name.\n" +
       "- description (string): human-readable description and mechanical notes.\n" +
       "- damageDie (number): if present, the spell deals roll(damageDie) + spell stat damage.\n" +
       "- damageStat (StatKey): stat added to damage when damageDie is present.\n" +
       "- statModifiers (array): optional list of { label: StatKey, value: \"+N\" } that modify stats.\n" +
+      "- slotCost (number): fixed spell-slot cost used when casting.\n" +
+      "- slotCostMax (number): optional maximum slot count when the player may choose how many slots to spend.\n" +
+      "- scaleDamageBySlots (boolean): if true, each extra spell slot adds another damage die roll.\n" +
       "\nBehavior implemented by the app:\n" +
-      "- When a spell has damageDie and damageStat, casting logs: roll(damageDie) + caster's effective stat = damage.\n" +
+      "- If slotCostMax is absent, the spell uses the fixed slotCost. If slotCostMax is present, the player can choose a value between slotCost and slotCostMax.\n" +
       "\nSTRICT MINIMAL VALID OUTPUTS:\n" +
       "- Minimal utility spell:\n" +
-      "  {\"name\":\"Light\",\"description\":\"Create a small magical light.\"}\n" +
+      "  {\"name\":\"Light\",\"type\":\"Ability\",\"isSpell\":true,\"description\":\"Create a small magical light.\"}\n" +
       "- Minimal damage spell:\n" +
-      "  {\"name\":\"Spark\",\"description\":\"Quick magical strike.\",\"damageDie\":4,\"damageStat\":\"INT\"}\n",
+      "  {\"name\":\"Spark\",\"type\":\"Ability\",\"isSpell\":true,\"description\":\"Quick magical strike.\",\"damageDie\":4,\"damageStat\":\"INT\",\"slotCost\":2,\"scaleDamageBySlots\":true}\n",
     template: [
-      { name: "Spell Name", description: "Describe what this spell does.", damageDie: 6, damageStat: "INT", statModifiers: [{ label: "PHYS", value: "+1" }] },
+      { name: "Spell Name", type: "Ability", isSpell: true, description: "Describe what this spell does.", damageDie: 6, damageStat: "INT", slotCost: 2, slotCostMax: 3, scaleDamageBySlots: true, statModifiers: [{ label: "PHYS", value: "+1" }] },
     ],
   };
   const downloadSpellTemplate = async () => {
@@ -2053,7 +2069,9 @@ export default function App() {
       const items: Spell[] = (Array.isArray(data) ? data : [data]).map((s: any, i: number) => ({
         id: nextSpellId + i,
         name: s.name ?? "Unnamed Spell",
+        type: "Ability" as AbilityType,
         description: s.description ?? "",
+        isSpell: true,
         ...(s.damageDie ? { damageDie: Number(s.damageDie) } : {}),
         ...(canonicalStatKey(s.damageStat) ? { damageStat: canonicalStatKey(s.damageStat) as StatKey } : {}),
         ...(Array.isArray(s.statModifiers)
@@ -2066,6 +2084,9 @@ export default function App() {
                 })),
             }
           : {}),
+        ...(s.slotCost !== undefined ? { slotCost: Math.max(1, Number(s.slotCost) || 1) } : {}),
+        ...(s.slotCostMax !== undefined ? { slotCostMax: Math.max(1, Number(s.slotCostMax) || 1) } : {}),
+        ...(s.scaleDamageBySlots !== undefined ? { scaleDamageBySlots: Boolean(s.scaleDamageBySlots) } : {}),
       }));
       setSpells((prev) => [...prev, ...items]);
       setNextSpellId((n) => n + items.length);
@@ -2075,15 +2096,27 @@ export default function App() {
     } catch {}
   };
 
-  const castSpell = (spell: Spell) => {
-    // Log spell casting without applying damage to player
+  const castSpell = (spell: Spell, slotCount: number) => {
+    const minCost = Math.max(1, spell.slotCost ?? 1);
+    const maxCost = Math.max(minCost, spell.slotCostMax ?? minCost);
+    const selectedSlotCount = Math.max(minCost, Math.min(slotCount, Math.min(wizardSpellSlots, maxCost)));
+
+    if (selectedSlotCount > wizardSpellSlots) {
+      addLog(`✨ ${spell.name} — not enough spell slots available.`, "info");
+      return;
+    }
+
+    setWizardSpellSlots((current) => Math.max(0, current - selectedSlotCount));
+
     if (spell.damageDie && spell.damageStat) {
-      const roll = rollD(spell.damageDie);
+      const damageRolls = spell.scaleDamageBySlots ? selectedSlotCount : 1;
+      let totalRoll = 0;
+      for (let i = 0; i < damageRolls; i += 1) totalRoll += rollD(spell.damageDie);
       const stat = effectiveStats[spell.damageStat];
-      const damage = roll + stat;
-      addLog(`✨ ${spell.name} — d${spell.damageDie}(${roll}) + ${spell.damageStat}(${stat}) = ${damage} damage dealt`, "info");
+      const damage = totalRoll + stat;
+      addLog(`✨ ${spell.name} — ${selectedSlotCount} slot${selectedSlotCount > 1 ? "s" : ""}; ${damageRolls}d${spell.damageDie}(${totalRoll}) + ${spell.damageStat}(${stat}) = ${damage} damage dealt`, "info");
     } else {
-      addLog(`✨ Cast ${spell.name}`, "info");
+      addLog(`✨ Cast ${spell.name} using ${selectedSlotCount} slot${selectedSlotCount > 1 ? "s" : ""}`, "info");
     }
   };
 
@@ -3067,9 +3100,29 @@ export default function App() {
                           </button>
                         </div>
                         <div className="flex flex-wrap gap-1 mt-2">
+                          <div className="flex items-center gap-1">
+                            <span className="text-[9px]" style={{ color: "#6a9ae0", fontFamily: "'Cinzel', serif" }}>Slots</span>
+                            {spell.slotCostMax !== undefined && spell.slotCostMax > (spell.slotCost ?? 1) ? (
+                              <select
+                                value={spellSlotSelections[spell.id] ?? Math.max(1, spell.slotCost ?? 1)}
+                                onChange={(e) => setSpellSlotSelections((prev) => ({ ...prev, [spell.id]: Number(e.target.value) }))}
+                                className="text-[9px] px-1.5 py-0.5 rounded"
+                                style={{ background: "rgba(106,154,224,0.08)", border: "1px solid rgba(106,154,224,0.2)", color: "#e2cfa0", fontFamily: "'JetBrains Mono', monospace" }}
+                              >
+                                {Array.from({ length: Math.max(1, Math.min(wizardSpellSlots, spell.slotCostMax ?? 1) - Math.max(1, spell.slotCost ?? 1) + 1) }, (_, index) => {
+                                  const value = Math.max(1, spell.slotCost ?? 1) + index;
+                                  return <option key={value} value={value}>{value}</option>;
+                                })}
+                              </select>
+                            ) : (
+                              <span className="text-[9px] px-1.5 py-0.5 rounded" style={{ background: "rgba(106,154,224,0.06)", border: "1px solid rgba(106,154,224,0.2)", color: "#e2cfa0", fontFamily: "'JetBrains Mono', monospace" }}>
+                                {spell.slotCost ?? 1}
+                              </span>
+                            )}
+                          </div>
                           {spell.damageDie && spell.damageStat && (
                             <button
-                              onClick={() => castSpell(spell)}
+                              onClick={() => castSpell(spell, spellSlotSelections[spell.id] ?? Math.max(1, spell.slotCost ?? 1))}
                               className="text-[10px] px-2 py-0.5 rounded transition-all hover:opacity-90 active:scale-95 font-semibold"
                               style={{ background: "rgba(106,154,224,0.2)", border: "1px solid rgba(106,154,224,0.4)", color: "#6a9ae0", fontFamily: "'Cinzel', serif", cursor: "pointer" }}
                             >
