@@ -4118,7 +4118,7 @@ export default function App() {
                         </div>
                         <span className="text-xs shrink-0 ml-1" style={{ fontFamily: "'JetBrains Mono', monospace", color: "#c4853a" }}>{cm.initiative}</span>
                       </div>
-                      <div className="text-xs" style={{ color: "#9a8a6a", fontFamily: "'JetBrains Mono', monospace" }}>CR {cm.def.cr} · AC {cm.def.ac} · Spd {cm.def.speed}</div>
+                      <div className="text-xs" style={{ color: "#9a8a6a", fontFamily: "'JetBrains Mono', monospace" }}>CR {cm.def.cr} · AC {cm.def.ac} · MR {cm.def.mr} · Spd {cm.def.speed}</div>
                       {/* HP bar */}
                       <div className="relative h-3 rounded-sm overflow-hidden" style={{ background: "#1a1510" }}>
                         <div className="h-full transition-all duration-300" style={{ width: `${hpPct}%`, background: hpCol }} />

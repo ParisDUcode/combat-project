@@ -6,6 +6,7 @@ export const MONSTER_TEMPLATE_INSTRUCTIONS = [
   "Attacks and abilities are stat-driven through formula.stat + formula.flatBonus.",
   "Use passive triggers for autonomous effects at encounter and turn checkpoints.",
   "Include a speed value for every monster; it is shown in combat cards and represents basic movement.",
+  "Add an mr value when the monster should resist magic damage; use 0 for monsters without magic resistance.",
 ].join("\n");
 
 export const MONSTER_TEMPLATE: MonsterDefinition = {
@@ -20,6 +21,7 @@ export const MONSTER_TEMPLATE: MonsterDefinition = {
   },
   hp: 18,
   ac: 2,
+  mr: 0,
   speed: 5,
   attacks: [
     {

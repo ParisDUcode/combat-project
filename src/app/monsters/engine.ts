@@ -29,6 +29,20 @@ export interface AttackResolution {
   effectLines: string[];
 }
 
+const applyDamageTypeResistance = (
+  rawDamage: number,
+  damageType: MonsterDefinition["attacks"][number]["damageType"] | ActiveAbility["damageType"] | MonsterEffect["damageType"],
+  monster: MonsterDefinition,
+): number => {
+  if (damageType === "magic") {
+    return Math.max(0, rawDamage - monster.mr);
+  }
+  if (damageType === "physical") {
+    return Math.max(0, rawDamage - monster.ac);
+  }
+  return rawDamage;
+};
+
 export interface AbilityResolution {
   runtime: MonsterCombatRuntime;
   canUse: boolean;
@@ -151,7 +165,8 @@ export const resolveMonsterAttack = (
 ): AttackResolution => {
   const roll = applyFormula(attack.formula, monster.stats);
   const passive = resolvePassiveTrigger(monster, runtime, "on_attack_hit");
-  const totalDamage = Math.max(0, roll.total + passive.bonusDamage);
+  const rawDamage = Math.max(0, roll.total + passive.bonusDamage);
+  const totalDamage = applyDamageTypeResistance(rawDamage, attack.damageType, monster);
   const parts = [`${monster.name} - ${attack.name}`, `(${roll.diceResults.join("+") || "0"}`];
   parts.push(`+${roll.statBonus}`);
   if (roll.flatBonus) parts.push(`+${roll.flatBonus}`);
@@ -225,6 +240,7 @@ export const resolveActiveAbility = (
 
   const roll = applyFormula(ability.formula, monster.stats);
   let damage = ability.target === "player" ? Math.max(0, roll.total) : 0;
+  const baseDamageType = ability.damageType;
   let selfHealing = ability.target === "self" ? Math.max(0, roll.total) : 0;
   const effectLines: string[] = [];
 
@@ -236,12 +252,14 @@ export const resolveActiveAbility = (
     if (outcome.logLine) effectLines.push(outcome.logLine);
   });
 
+  const resistedDamage = applyDamageTypeResistance(damage, baseDamageType, monster);
+
   return {
     runtime: nextRuntime,
     canUse: true,
-    damage,
+    damage: resistedDamage,
     selfHealing,
-    logLine: `${monster.name} uses ${ability.name}${ability.target === "player" ? ` for ${damage} damage` : ability.target === "self" ? ` and heals ${selfHealing}` : ""}.`,
+    logLine: `${monster.name} uses ${ability.name}${ability.target === "player" ? ` for ${resistedDamage} damage` : ability.target === "self" ? ` and heals ${selfHealing}` : ""}.`,
     effectLines,
   };
 };

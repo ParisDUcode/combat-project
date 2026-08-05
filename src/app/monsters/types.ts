@@ -7,6 +7,8 @@ export interface MonsterStats {
   SOC: number;
 }
 
+export type DamageType = "physical" | "magic" | "true";
+
 export interface RollFormula {
   diceCount: number;
   diceSides: number;
@@ -26,6 +28,7 @@ export type PassiveTrigger =
 export interface MonsterEffect {
   type: "damage" | "heal_self" | "resource_gain" | "note";
   formula?: RollFormula;
+  damageType?: DamageType;
   resourceId?: string;
   note?: string;
 }
@@ -34,6 +37,7 @@ export interface RollableAttack {
   id: string;
   name: string;
   formula: RollFormula;
+  damageType?: DamageType;
   description?: string;
   effects?: MonsterEffect[];
 }
@@ -44,6 +48,7 @@ export interface ActiveAbility {
   description?: string;
   target: "player" | "self" | "none";
   formula?: RollFormula;
+  damageType?: DamageType;
   effects?: MonsterEffect[];
   cooldownTurns?: number;
   maxCharges?: number;
@@ -72,6 +77,7 @@ export interface MonsterDefinition {
   stats: MonsterStats;
   hp: number;
   ac: number;
+  mr: number;
   speed: number;
   attacks: RollableAttack[];
   activeAbilities: ActiveAbility[];
@@ -144,6 +150,10 @@ const normalizeEffects = (effects: unknown): MonsterEffect[] => {
         type: ["damage", "heal_self", "resource_gain", "note"].includes(type) ? type : "note",
       };
       if (value.formula) normalized.formula = normalizeFormula(value.formula);
+      const damageType = value.damageType;
+      if (damageType === "physical" || damageType === "magic" || damageType === "true") {
+        normalized.damageType = damageType;
+      }
       if (value.resourceId) normalized.resourceId = String(value.resourceId);
       if (value.note) normalized.note = String(value.note);
       return normalized;
@@ -172,10 +182,15 @@ const normalizeAttack = (attack: unknown): RollableAttack | null => {
     effects.push({ type: "note", note: String(value.effect) });
   }
 
+  const damageType = value.damageType === "physical" || value.damageType === "magic" || value.damageType === "true"
+    ? value.damageType
+    : undefined;
+
   return {
     id,
     name,
     formula,
+    damageType,
     description: value.description ? String(value.description) : undefined,
     effects,
   };
@@ -185,12 +200,17 @@ const normalizeAbility = (ability: unknown): ActiveAbility | null => {
   if (!ability || typeof ability !== "object") return null;
   const value = ability as Partial<ActiveAbility>;
   const id = value.id ? String(value.id) : String(value.name ?? "ability").toLowerCase().replace(/\s+/g, "-");
+  const damageType = value.damageType === "physical" || value.damageType === "magic" || value.damageType === "true"
+    ? value.damageType
+    : undefined;
+
   return {
     id,
     name: String(value.name ?? "Active Ability"),
     description: value.description ? String(value.description) : undefined,
     target: value.target === "self" || value.target === "none" ? value.target : "player",
     formula: value.formula ? normalizeFormula(value.formula) : undefined,
+    damageType,
     effects: normalizeEffects(value.effects),
     cooldownTurns: value.cooldownTurns !== undefined ? Math.max(0, Math.floor(toSafeNumber(value.cooldownTurns, 0))) : undefined,
     maxCharges: value.maxCharges !== undefined ? Math.max(1, Math.floor(toSafeNumber(value.maxCharges, 1))) : undefined,
@@ -240,6 +260,19 @@ const normalizeResourcePool = (pool: unknown): MonsterResourcePool | null => {
   };
 };
 
+const parseMonsterMr = (value: Partial<MonsterDefinition> & { tags?: unknown[] }, defaultValue = 0): number => {
+  const direct = toSafeNumber((value as { mr?: unknown }).mr, Number.NaN);
+  if (Number.isFinite(direct)) return Math.max(0, Math.floor(direct));
+
+  const tags = Array.isArray(value.tags) ? value.tags.map((tag) => String(tag).toLowerCase()) : [];
+  const tagMatch = tags.find((tag) => tag.startsWith("mr-"));
+  if (!tagMatch) return defaultValue;
+
+  const parsed = Number(tagMatch.slice(3));
+  if (!Number.isFinite(parsed)) return defaultValue;
+  return Math.max(0, Math.floor(parsed));
+};
+
 export const normalizeMonsterDefinition = (monster: unknown): MonsterDefinition => {
   const value = (monster && typeof monster === "object" ? monster : {}) as Partial<MonsterDefinition> & { attacks?: unknown[]; stats?: Partial<MonsterStats> };
   const legacyStats = value.stats as Partial<Record<"STR" | "DEX" | "WIS" | "CHA" | "SOCIAL", unknown>> | undefined;
@@ -274,6 +307,7 @@ export const normalizeMonsterDefinition = (monster: unknown): MonsterDefinition 
     stats,
     hp: Math.max(1, Math.floor(toSafeNumber(value.hp, 1))),
     ac: Math.max(0, Math.floor(toSafeNumber(value.ac, 0))),
+    mr: parseMonsterMr(value as Partial<MonsterDefinition> & { tags?: unknown[] }, 0),
     speed,
     attacks,
     activeAbilities: Array.isArray(value.activeAbilities)
