@@ -3195,7 +3195,7 @@ export default function App() {
                 <span className="text-xs uppercase tracking-widest flex items-center gap-2" style={{ color: "#9a8a6a", fontFamily: "'Cinzel', serif" }}>
                   <Scroll size={12} style={{ color: "#c4853a" }} /> Dice Log
                 </span>
-                <button onClick={() => { setLog([{ id: nextId, text: "Combat begins. Roll for initiative!", type: "info" }]); setNextId((n) => n + 1); }}
+                <button onClick={() => { setLog([]); setNextId(0); }}
                   className="text-xs hover:opacity-70 transition-opacity" style={{ color: "#9a8a6a", fontFamily: "'Cinzel', serif", cursor: "pointer", background: "none", border: "none" }}>Clear</button>
               </div>
               <div className="flex flex-col gap-1.5 overflow-y-auto" style={{ maxHeight: 220, scrollbarWidth: "thin", scrollbarColor: "rgba(196,133,58,0.2) transparent" }}>
