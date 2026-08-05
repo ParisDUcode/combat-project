@@ -904,14 +904,20 @@ export default function App() {
   const totalPoints = level === "" ? 0 : Number(level);
   const spentPoints = STAT_LABELS.reduce((s, k) => s + statBonuses[k], 0);
   const availablePoints = totalPoints - spentPoints;
+  const fixedStatBonuses = STAT_LABELS.reduce((acc, stat) => {
+    acc[stat] = abilityScoreModifiers[stat] + equipmentScoreBonuses[stat];
+    return acc;
+  }, { ...EMPTY_STATS } as Stats);
 
   const spendPoint = (stat: StatKey) => {
     if (availablePoints <= 0) return;
+    if (fixedStatBonuses[stat] > 0) return;
     setStats((p) => ({ ...p, [stat]: p[stat] + 1 }));
     setStatBonuses((p) => ({ ...p, [stat]: p[stat] + 1 }));
   };
   const refundPoint = (stat: StatKey) => {
     if (statBonuses[stat] <= 0) return;
+    if (fixedStatBonuses[stat] > 0) return;
     setStats((p) => ({ ...p, [stat]: p[stat] - 1 }));
     setStatBonuses((p) => ({ ...p, [stat]: p[stat] - 1 }));
   };
@@ -2434,14 +2440,20 @@ export default function App() {
               </div>
               <div className="grid grid-cols-2 gap-2">
                 {STAT_LABELS.map((stat) => {
-                  const canSpend = availablePoints > 0;
-                  const canRefund = statBonuses[stat] > 0;
+                  const hasFixedBonus = fixedStatBonuses[stat] > 0;
+                  const canSpend = availablePoints > 0 && !hasFixedBonus;
+                  const canRefund = statBonuses[stat] > 0 && !hasFixedBonus;
                   return (
                     <div key={stat} className="flex flex-col items-center py-2 px-1 cursor-pointer"
                       onClick={() => setStatPopup(statPopup === stat ? null : stat)}
                       style={{ border: `1px solid ${statPopup === stat ? STAT_COLORS[stat] : canSpend ? "rgba(196,133,58,0.3)" : "rgba(196,133,58,0.15)"}`, borderRadius: 4, background: statPopup === stat ? `${STAT_COLORS[stat]}10` : "#111008", transition: "all 0.15s" }}>
                       <span className="text-xs font-semibold tracking-widest mb-1" style={{ fontFamily: "'Cinzel', serif", color: STAT_COLORS[stat] }}>{stat}</span>
                       <span className="text-xl font-bold leading-none my-1" style={{ fontFamily: "'JetBrains Mono', monospace", color: "#e2cfa0" }}>{effectiveStats[stat]}</span>
+                      {hasFixedBonus && (
+                        <span className="text-[10px] mb-1 uppercase tracking-[0.2em]" style={{ color: "#6a5a3a", fontFamily: "'Cinzel', serif" }}>
+                          Fixed +{fixedStatBonuses[stat]}
+                        </span>
+                      )}
                       <div className="flex items-center gap-1 mt-1">
                         <button onClick={() => refundPoint(stat)} disabled={!canRefund} className="w-5 h-5 flex items-center justify-center rounded"
                           style={{ background: canRefund ? "rgba(139,28,28,0.4)" : "rgba(255,255,255,0.04)", border: `1px solid ${canRefund ? "rgba(139,28,28,0.6)" : "rgba(255,255,255,0.06)"}`, color: canRefund ? "#f5c5c5" : "#3a3028", fontSize: 14, lineHeight: 1, cursor: canRefund ? "pointer" : "default" }}>−</button>
