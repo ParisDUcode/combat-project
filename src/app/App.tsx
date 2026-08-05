@@ -57,6 +57,7 @@ interface Ability {
   tallyFormula?: string; // e.g. "level", "floor(level/2)", "level + INT"
   modifiers?: AbilityModifier[];
   actions?: AbilityAction[];
+  hidden?: boolean;
 }
 
 const isPassiveAbility = (ability: Ability | null | undefined): boolean =>
@@ -451,9 +452,15 @@ export default function App() {
   const [characterLoadJsonOpen, setCharacterLoadJsonOpen] = useState(false);
 
   const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null);
+  const [inventoryPanelVisible, setInventoryPanelVisible] = useState(false);
   const [statPopup, setStatPopup] = useState<StatKey | "AC" | "Initiative" | "Speed" | null>(null);
   const [adminOpen, setAdminOpen] = useState(false);
   const [dodgePopup, setDodgePopup] = useState<string | null>(null);
+  const [hiddenEquipmentEntries, setHiddenEquipmentEntries] = useState<Record<string, boolean>>({});
+  const [hiddenWeaponAttackEntries, setHiddenWeaponAttackEntries] = useState<Record<string, boolean>>({});
+  const [hidePrompt, setHidePrompt] = useState<{ kind: "slot" | "weapon-attack" | "ability"; key: string; label: string } | null>(null);
+  const longPressTimerRef = useRef<number | null>(null);
+  const suppressNextClickRef = useRef(false);
 
   // ─── Class abilities ──────────────────────────────────────────────────────
   const [secondWindUses, setSecondWindUses] = useState(2);
@@ -904,20 +911,14 @@ export default function App() {
   const totalPoints = level === "" ? 0 : Number(level);
   const spentPoints = STAT_LABELS.reduce((s, k) => s + statBonuses[k], 0);
   const availablePoints = totalPoints - spentPoints;
-  const fixedStatBonuses = STAT_LABELS.reduce((acc, stat) => {
-    acc[stat] = abilityScoreModifiers[stat] + equipmentScoreBonuses[stat];
-    return acc;
-  }, { ...EMPTY_STATS } as Stats);
 
   const spendPoint = (stat: StatKey) => {
     if (availablePoints <= 0) return;
-    if (fixedStatBonuses[stat] > 0) return;
     setStats((p) => ({ ...p, [stat]: p[stat] + 1 }));
     setStatBonuses((p) => ({ ...p, [stat]: p[stat] + 1 }));
   };
   const refundPoint = (stat: StatKey) => {
     if (statBonuses[stat] <= 0) return;
-    if (fixedStatBonuses[stat] > 0) return;
     setStats((p) => ({ ...p, [stat]: p[stat] - 1 }));
     setStatBonuses((p) => ({ ...p, [stat]: p[stat] - 1 }));
   };
@@ -1445,6 +1446,64 @@ export default function App() {
     if (selectedItem?.id === id) setSelectedItem(null);
   };
 
+  const clearLongPressTimer = () => {
+    if (longPressTimerRef.current !== null) {
+      window.clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  };
+
+  const beginLongPress = (handler: () => void) => (e: React.MouseEvent<HTMLElement> | React.TouchEvent<HTMLElement>) => {
+    if ("button" in e && e.button !== 0) return;
+    clearLongPressTimer();
+    longPressTimerRef.current = window.setTimeout(() => {
+      suppressNextClickRef.current = true;
+      handler();
+      clearLongPressTimer();
+    }, 450);
+  };
+
+  const cancelLongPress = () => clearLongPressTimer();
+
+  const handleCardClickCapture = (e: React.MouseEvent<HTMLElement>) => {
+    if (suppressNextClickRef.current) {
+      suppressNextClickRef.current = false;
+      e.stopPropagation();
+      e.preventDefault();
+    }
+  };
+
+  const confirmHidePrompt = () => {
+    if (!hidePrompt) return;
+    if (hidePrompt.kind === "ability") {
+      setAbilities((prev) => prev.map((ability) => ability.id === Number(hidePrompt.key) ? { ...ability, hidden: true } : ability));
+    } else if (hidePrompt.kind === "slot") {
+      setHiddenEquipmentEntries((prev) => ({ ...prev, [hidePrompt.key]: true }));
+    } else if (hidePrompt.kind === "weapon-attack") {
+      setHiddenWeaponAttackEntries((prev) => ({ ...prev, [hidePrompt.key]: true }));
+    }
+    setHidePrompt(null);
+  };
+
+  const clearHiddenDisplayForItem = (itemId: number) => {
+    setHiddenEquipmentEntries((prev) => {
+      const next = { ...prev };
+      Object.keys(next).forEach((key) => {
+        if (key.endsWith(`:${itemId}`)) delete next[key];
+      });
+      return next;
+    });
+    setHiddenWeaponAttackEntries((prev) => {
+      const next = { ...prev };
+      Object.keys(next).forEach((key) => {
+        if (key.startsWith(`${itemId}:`)) delete next[key];
+      });
+      return next;
+    });
+  };
+
+  useEffect(() => () => clearLongPressTimer(), []);
+
   // ─── Drag & drop ─────────────────────────────────────────────────────────
   const onItemDragStart = (item: InventoryItem) => {
     dragItemId.current = item.id;
@@ -1483,6 +1542,7 @@ export default function App() {
         });
         return next;
       });
+      clearHiddenDisplayForItem(item.id);
 
       setInventory((prev) => {
         const filtered = prev.filter((i) => i.id !== item.id);
@@ -1515,6 +1575,7 @@ export default function App() {
         });
         return next;
       });
+      clearHiddenDisplayForItem(sourceItem.id);
 
       if (displaced.length > 0) {
         setInventory((prev) => [...prev, ...displaced]);
@@ -2440,20 +2501,14 @@ export default function App() {
               </div>
               <div className="grid grid-cols-2 gap-2">
                 {STAT_LABELS.map((stat) => {
-                  const hasFixedBonus = fixedStatBonuses[stat] > 0;
-                  const canSpend = availablePoints > 0 && !hasFixedBonus;
-                  const canRefund = statBonuses[stat] > 0 && !hasFixedBonus;
+                  const canSpend = availablePoints > 0;
+                  const canRefund = statBonuses[stat] > 0;
                   return (
                     <div key={stat} className="flex flex-col items-center py-2 px-1 cursor-pointer"
                       onClick={() => setStatPopup(statPopup === stat ? null : stat)}
                       style={{ border: `1px solid ${statPopup === stat ? STAT_COLORS[stat] : canSpend ? "rgba(196,133,58,0.3)" : "rgba(196,133,58,0.15)"}`, borderRadius: 4, background: statPopup === stat ? `${STAT_COLORS[stat]}10` : "#111008", transition: "all 0.15s" }}>
                       <span className="text-xs font-semibold tracking-widest mb-1" style={{ fontFamily: "'Cinzel', serif", color: STAT_COLORS[stat] }}>{stat}</span>
                       <span className="text-xl font-bold leading-none my-1" style={{ fontFamily: "'JetBrains Mono', monospace", color: "#e2cfa0" }}>{effectiveStats[stat]}</span>
-                      {hasFixedBonus && (
-                        <span className="text-[10px] mb-1 uppercase tracking-[0.2em]" style={{ color: "#6a5a3a", fontFamily: "'Cinzel', serif" }}>
-                          Fixed +{fixedStatBonuses[stat]}
-                        </span>
-                      )}
                       <div className="flex items-center gap-1 mt-1">
                         <button onClick={() => refundPoint(stat)} disabled={!canRefund} className="w-5 h-5 flex items-center justify-center rounded"
                           style={{ background: canRefund ? "rgba(139,28,28,0.4)" : "rgba(255,255,255,0.04)", border: `1px solid ${canRefund ? "rgba(139,28,28,0.6)" : "rgba(255,255,255,0.06)"}`, color: canRefund ? "#f5c5c5" : "#3a3028", fontSize: 14, lineHeight: 1, cursor: canRefund ? "pointer" : "default" }}>−</button>
@@ -2643,11 +2698,18 @@ export default function App() {
                   <div className="absolute bottom-0 left-0 right-0 h-0.5 opacity-0 group-hover:opacity-100 transition-opacity" style={{ background: "#c4853a" }} />
                 </button>
 
-                {abilities.filter(isPassiveAbility).map((ability) => (
+                {abilities.filter(isPassiveAbility).filter((ability) => !ability.hidden).map((ability) => (
                   <div
                     key={`passive-${ability.id}`}
                     className="w-full py-3 px-4"
                     style={{ background: "linear-gradient(135deg, #101008, #17130a)", border: "1px solid rgba(196,133,58,0.2)", borderRadius: 5 }}
+                    onMouseDown={beginLongPress(() => setHidePrompt({ kind: "ability", key: String(ability.id), label: ability.name }))}
+                    onMouseUp={cancelLongPress}
+                    onMouseLeave={cancelLongPress}
+                    onTouchStart={beginLongPress(() => setHidePrompt({ kind: "ability", key: String(ability.id), label: ability.name }))}
+                    onTouchEnd={cancelLongPress}
+                    onTouchCancel={cancelLongPress}
+                    onClickCapture={handleCardClickCapture}
                   >
                     <div className="flex items-center justify-between gap-2 mb-1">
                       <div className="text-sm font-bold" style={{ fontFamily: "'Cinzel', serif", color: "#e2cfa0" }}>{ability.name}</div>
@@ -2664,22 +2726,28 @@ export default function App() {
                   </div>
                 ))}
 
-                {Array.from(
-                  new Map(
-                    (Object.values(equipment) as (InventoryItem | null)[])
-                      .filter((wpn): wpn is InventoryItem => Boolean(wpn && wpn.type === "weapon"))
-                      .map((wpn) => [wpn.id, wpn]),
-                  ).values(),
-                ).map((wpn, i) => {
-                  if (!wpn || wpn.type !== "weapon") return null;
-                  const normalizedWeapon = normalizeWeaponCharges(wpn);
+                {(Object.entries(equipment) as [EquipSlot, InventoryItem | null][])
+                  .filter(([, wpn]) => Boolean(wpn && wpn.type === "weapon"))
+                  .map(([slotKey, wpn], i) => {
+                    if (!wpn || wpn.type !== "weapon") return null;
+                    const hiddenEntryKey = `${slotKey}:${wpn.id}`;
+                    if (hiddenEquipmentEntries[hiddenEntryKey]) return null;
+                    const normalizedWeapon = normalizeWeaponCharges(wpn);
                   const hasAttackProfile = hasWeaponAttackProfile(normalizedWeapon);
                   const maxCharges = normalizedWeapon.maxCharges;
                   const charges = normalizedWeapon.currentCharges ?? maxCharges ?? 0;
 
                   if (!hasAttackProfile) {
                     return (
-                      <div key={i} style={{ background: "linear-gradient(135deg, #101008, #17130a)", border: "1px solid rgba(196,133,58,0.2)", borderRadius: 5, padding: "10px 14px" }}>
+                      <div key={i} style={{ background: "linear-gradient(135deg, #101008, #17130a)", border: "1px solid rgba(196,133,58,0.2)", borderRadius: 5, padding: "10px 14px" }}
+                        onMouseDown={beginLongPress(() => setHidePrompt({ kind: "slot", key: hiddenEntryKey, label: normalizedWeapon.name }))}
+                        onMouseUp={cancelLongPress}
+                        onMouseLeave={cancelLongPress}
+                        onTouchStart={beginLongPress(() => setHidePrompt({ kind: "slot", key: hiddenEntryKey, label: normalizedWeapon.name }))}
+                        onTouchEnd={cancelLongPress}
+                        onTouchCancel={cancelLongPress}
+                        onClickCapture={handleCardClickCapture}
+                      >
                         <div className="flex items-center justify-between gap-2 mb-1">
                           <div className="text-sm font-bold" style={{ fontFamily: "'Cinzel', serif", color: "#e2cfa0" }}>{normalizedWeapon.name}</div>
                           <span className="text-[10px] uppercase tracking-[0.2em]" style={{ color: "#9a8a6a", fontFamily: "'Cinzel', serif" }}>Passive</span>
@@ -2696,7 +2764,15 @@ export default function App() {
 
                   if (normalizedWeapon.attacks && normalizedWeapon.attacks.length > 0) {
                     return (
-                      <div key={i} style={{ background: "linear-gradient(135deg, #14100a, #1e1608)", border: "1px solid rgba(196,133,58,0.3)", borderRadius: 5, padding: "10px 14px" }}>
+                      <div key={i} style={{ background: "linear-gradient(135deg, #14100a, #1e1608)", border: "1px solid rgba(196,133,58,0.3)", borderRadius: 5, padding: "10px 14px" }}
+                        onMouseDown={beginLongPress(() => setHidePrompt({ kind: "slot", key: hiddenEntryKey, label: normalizedWeapon.name }))}
+                        onMouseUp={cancelLongPress}
+                        onMouseLeave={cancelLongPress}
+                        onTouchStart={beginLongPress(() => setHidePrompt({ kind: "slot", key: hiddenEntryKey, label: normalizedWeapon.name }))}
+                        onTouchEnd={cancelLongPress}
+                        onTouchCancel={cancelLongPress}
+                        onClickCapture={handleCardClickCapture}
+                      >
                         <div className="flex items-center justify-between gap-2 mb-2">
                           <div className="text-sm font-bold" style={{ fontFamily: "'Cinzel', serif", color: "#e2cfa0" }}>{normalizedWeapon.name}</div>
                           {maxCharges ? (
@@ -2813,7 +2889,15 @@ export default function App() {
                             return (
                               <button key={atkIdx} onClick={() => doWeaponAttack(normalizedWeapon, atkIdx)} disabled={!!noCharges}
                                 className="w-full py-2 px-3 text-left transition-all hover:opacity-90 active:scale-95"
-                                style={{ background: noCharges ? "#111008" : "rgba(196,133,58,0.1)", border: `1px solid ${noCharges ? "rgba(196,133,58,0.1)" : "rgba(196,133,58,0.35)"}`, borderRadius: 4, cursor: noCharges ? "default" : "pointer", opacity: noCharges ? 0.45 : 1 }}>
+                                style={{ background: noCharges ? "#111008" : "rgba(196,133,58,0.1)", border: `1px solid ${noCharges ? "rgba(196,133,58,0.1)" : "rgba(196,133,58,0.35)"}`, borderRadius: 4, cursor: noCharges ? "default" : "pointer", opacity: noCharges ? 0.45 : 1 }}
+                                onMouseDown={beginLongPress(() => setHidePrompt({ kind: "weapon-attack", key: `${normalizedWeapon.id}:${atkIdx}`, label: atk.name }))}
+                                onMouseUp={cancelLongPress}
+                                onMouseLeave={cancelLongPress}
+                                onTouchStart={beginLongPress(() => setHidePrompt({ kind: "weapon-attack", key: `${normalizedWeapon.id}:${atkIdx}`, label: atk.name }))}
+                                onTouchEnd={cancelLongPress}
+                                onTouchCancel={cancelLongPress}
+                                onClickCapture={handleCardClickCapture}
+                              >
                                 <div className="flex items-center justify-between gap-2">
                                   <span className="text-xs font-semibold" style={{ fontFamily: "'Cinzel', serif", color: "#e2cfa0" }}>
                                     {atk.name}{atk.consumesCharge ? " ⚡" : ""}
@@ -2840,7 +2924,15 @@ export default function App() {
 
                   return (
                     <div key={i} className="group relative w-full py-4 px-6 text-left"
-                      style={{ background: "linear-gradient(135deg, #14100a, #1e1608)", border: "1px solid rgba(196,133,58,0.3)", borderRadius: 5 }}>
+                      style={{ background: "linear-gradient(135deg, #14100a, #1e1608)", border: "1px solid rgba(196,133,58,0.3)", borderRadius: 5 }}
+                      onMouseDown={beginLongPress(() => setHidePrompt({ kind: "slot", key: hiddenEntryKey, label: normalizedWeapon.name }))}
+                      onMouseUp={cancelLongPress}
+                      onMouseLeave={cancelLongPress}
+                      onTouchStart={beginLongPress(() => setHidePrompt({ kind: "slot", key: hiddenEntryKey, label: normalizedWeapon.name }))}
+                      onTouchEnd={cancelLongPress}
+                      onTouchCancel={cancelLongPress}
+                      onClickCapture={handleCardClickCapture}
+                    >
                       <button onClick={() => doWeaponAttack(normalizedWeapon)} className="w-full text-left transition-all hover:opacity-90 active:scale-95"
                         style={{ background: "transparent", border: "none", padding: 0, cursor: "pointer" }}>
                         <div className="flex items-center justify-between gap-2 mb-1">
@@ -3259,210 +3351,255 @@ export default function App() {
 
         {/* ── INVENTORY ────────────────────────────────────────────────────── */}
         <div className="mt-4 grid grid-cols-1 xl:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)] gap-4">
-          <div style={panelStyle}>
-            <div className="flex items-center justify-between mb-4">
-              <div className="text-xs uppercase tracking-widest flex items-center gap-2" style={{ color: "#9a8a6a", fontFamily: "'Cinzel', serif" }}>
-                <Package size={12} style={{ color: "#c4853a" }} /> Inventory
-              </div>
-              <div className="flex items-center gap-2">
-                <svg width="18" height="18" viewBox="0 0 18 18" fill="none" style={{ flexShrink: 0 }}>
-                  <path d="M6 4.5 C6 3 7 2 9 2 C11 2 12 3 12 4.5 C12 5.5 11.2 6.2 10 6.5 L10 7 L8 7 L8 6.5 C6.8 6.2 6 5.5 6 4.5Z" fill="#c4853a" opacity="0.7"/>
-                  <ellipse cx="9" cy="7.5" rx="1.5" ry="0.5" fill="#c4853a" opacity="0.5"/>
-                  <path d="M4 11 C4 8.5 6 7 9 7 C12 7 14 8.5 14 11 C14 14 12 16 9 16 C6 16 4 14 4 11Z" fill="#c4853a" opacity="0.85"/>
-                  <ellipse cx="9" cy="11.5" rx="2" ry="1" fill="#e2cfa0" opacity="0.25"/>
-                </svg>
-                <span className="text-xs uppercase tracking-widest" style={{ color: "#c4853a", fontFamily: "'Cinzel', serif" }}>Gold</span>
-                <button onClick={() => setGold((g) => Math.max(0, g - 1))} className="w-5 h-5 flex items-center justify-center rounded transition-opacity hover:opacity-80"
-                  style={{ background: "rgba(196,133,58,0.12)", border: "1px solid rgba(196,133,58,0.25)", color: "#c4853a", cursor: "pointer", fontSize: 14, lineHeight: 1 }}>−</button>
-                <input
-                  type="number" min={0} value={gold}
-                  onChange={(e) => setGold(Math.max(0, Number(e.target.value) || 0))}
-                  className="text-center outline-none"
-                  style={{ fontFamily: "'JetBrains Mono', monospace", color: "#e2cfa0", fontSize: 15, fontWeight: 700, background: "transparent", border: "none", width: 52 }}
-                />
-                <button onClick={() => setGold((g) => g + 1)} className="w-5 h-5 flex items-center justify-center rounded transition-opacity hover:opacity-80"
-                  style={{ background: "rgba(196,133,58,0.12)", border: "1px solid rgba(196,133,58,0.25)", color: "#c4853a", cursor: "pointer", fontSize: 14, lineHeight: 1 }}>+</button>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-[200px_1fr] gap-6">
-              {/* Equipment slots */}
-              <div className="flex flex-col gap-2">
-                <div className="text-xs uppercase tracking-widest mb-1" style={{ color: "#9a8a6a", fontFamily: "'Cinzel', serif" }}>Equipped</div>
-                {EQUIP_SLOTS.map(({ key, label }) => {
-                  const item = equipment[key];
-                  const isOver = dragOverSlot === key;
-                  return (
-                    <div key={key}
-                      onDragOver={(e) => { e.preventDefault(); setDragOverSlot(key); }}
-                      onDragLeave={() => setDragOverSlot(null)}
-                      onDrop={() => onSlotDrop(key)}
-                      style={{
-                        border: `1px ${isOver ? "solid" : "dashed"} ${isOver ? "#c4853a" : "rgba(196,133,58,0.2)"}`,
-                        borderRadius: 5,
-                        background: isOver ? "rgba(196,133,58,0.06)" : "#0e0c08",
-                        minHeight: 40,
-                        transition: "all 0.15s",
-                      }}
+          {inventoryPanelVisible ? (
+            <>
+              <div style={panelStyle}>
+                <div className="flex items-center justify-between mb-4">
+                  <div className="text-xs uppercase tracking-widest flex items-center gap-2" style={{ color: "#9a8a6a", fontFamily: "'Cinzel', serif" }}>
+                    <Package size={12} style={{ color: "#c4853a" }} /> Inventory
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setInventoryPanelVisible(false)}
+                      className="px-2.5 py-1 text-[10px] uppercase tracking-widest transition-all hover:opacity-90"
+                      style={{ background: "rgba(196,133,58,0.12)", border: "1px solid rgba(196,133,58,0.3)", borderRadius: 4, color: "#c4853a", fontFamily: "'Cinzel', serif", cursor: "pointer" }}
                     >
-                      {item ? (
-                        <div
-                          draggable
-                          onDragStart={() => onSlotDragStart(key)}
-                          className="flex items-center justify-between px-3 py-2 cursor-grab"
-                          style={{ borderRadius: 4 }}
-                          onClick={() => setSelectedItem(selectedItem?.id === item.id ? null : item)}
+                      Hide
+                    </button>
+                    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" style={{ flexShrink: 0 }}>
+                      <path d="M6 4.5 C6 3 7 2 9 2 C11 2 12 3 12 4.5 C12 5.5 11.2 6.2 10 6.5 L10 7 L8 7 L8 6.5 C6.8 6.2 6 5.5 6 4.5Z" fill="#c4853a" opacity="0.7"/>
+                      <ellipse cx="9" cy="7.5" rx="1.5" ry="0.5" fill="#c4853a" opacity="0.5"/>
+                      <path d="M4 11 C4 8.5 6 7 9 7 C12 7 14 8.5 14 11 C14 14 12 16 9 16 C6 16 4 14 4 11Z" fill="#c4853a" opacity="0.85"/>
+                      <ellipse cx="9" cy="11.5" rx="2" ry="1" fill="#e2cfa0" opacity="0.25"/>
+                    </svg>
+                    <span className="text-xs uppercase tracking-widest" style={{ color: "#c4853a", fontFamily: "'Cinzel', serif" }}>Gold</span>
+                    <button onClick={() => setGold((g) => Math.max(0, g - 1))} className="w-5 h-5 flex items-center justify-center rounded transition-opacity hover:opacity-80"
+                      style={{ background: "rgba(196,133,58,0.12)", border: "1px solid rgba(196,133,58,0.25)", color: "#c4853a", cursor: "pointer", fontSize: 14, lineHeight: 1 }}>−</button>
+                    <input
+                      type="number" min={0} value={gold}
+                      onChange={(e) => setGold(Math.max(0, Number(e.target.value) || 0))}
+                      className="text-center outline-none"
+                      style={{ fontFamily: "'JetBrains Mono', monospace", color: "#e2cfa0", fontSize: 15, fontWeight: 700, background: "transparent", border: "none", width: 52 }}
+                    />
+                    <button onClick={() => setGold((g) => g + 1)} className="w-5 h-5 flex items-center justify-center rounded transition-opacity hover:opacity-80"
+                      style={{ background: "rgba(196,133,58,0.12)", border: "1px solid rgba(196,133,58,0.25)", color: "#c4853a", cursor: "pointer", fontSize: 14, lineHeight: 1 }}>+</button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-[200px_1fr] gap-6">
+                  {/* Equipment slots */}
+                  <div className="flex flex-col gap-2">
+                    <div className="text-xs uppercase tracking-widest mb-1" style={{ color: "#9a8a6a", fontFamily: "'Cinzel', serif" }}>Equipped</div>
+                    {EQUIP_SLOTS.map(({ key, label }) => {
+                      const item = equipment[key];
+                      const isOver = dragOverSlot === key;
+                      return (
+                        <div key={key}
+                          onDragOver={(e) => { e.preventDefault(); setDragOverSlot(key); }}
+                          onDragLeave={() => setDragOverSlot(null)}
+                          onDrop={() => onSlotDrop(key)}
+                          style={{
+                            border: `1px ${isOver ? "solid" : "dashed"} ${isOver ? "#c4853a" : "rgba(196,133,58,0.2)"}`,
+                            borderRadius: 5,
+                            background: isOver ? "rgba(196,133,58,0.06)" : "#0e0c08",
+                            minHeight: 40,
+                            transition: "all 0.15s",
+                          }}
                         >
-                          <div className="flex items-center gap-2 min-w-0">
-                            <span style={{ fontSize: 13, color: TYPE_COLORS[item.type] }}>{getItemIcon(item)}</span>
-                            <div className="min-w-0">
-                              <div className="text-sm truncate" style={{ color: "#e2cfa0", fontFamily: "'Crimson Pro', serif" }}>{item.name}</div>
-                              <div className="text-xs" style={{ color: "#9a8a6a", fontFamily: "'Cinzel', serif" }}>{label}</div>
+                          {item ? (
+                            <div
+                              draggable
+                              onDragStart={() => onSlotDragStart(key)}
+                              className="flex items-center justify-between px-3 py-2 cursor-grab"
+                              style={{ borderRadius: 4 }}
+                              onClick={() => setSelectedItem(selectedItem?.id === item.id ? null : item)}
+                            >
+                              <div className="flex items-center gap-2 min-w-0">
+                                <span style={{ fontSize: 13, color: TYPE_COLORS[item.type] }}>{getItemIcon(item)}</span>
+                                <div className="min-w-0">
+                                  <div className="text-sm truncate" style={{ color: "#e2cfa0", fontFamily: "'Crimson Pro', serif" }}>{item.name}</div>
+                                  <div className="text-xs" style={{ color: "#9a8a6a", fontFamily: "'Cinzel', serif" }}>{label}</div>
+                                </div>
+                              </div>
+                              <button onClick={() => unequipToBack(key)} style={{ background: "none", border: "none", cursor: "pointer", color: "#6a3a3a", padding: 0, flexShrink: 0 }}>
+                                <X size={12} />
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="flex items-center px-3 py-2 gap-2">
+                              <span className="text-xs" style={{ color: "#3a3020", fontFamily: "'Cinzel', serif" }}>{label}</span>
+                              <span className="text-xs" style={{ color: "#2a2016", fontFamily: "'Cinzel', serif" }}>— drop here</span>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Bag */}
+                  <div onDragOver={(e) => e.preventDefault()} onDrop={onBagDrop}>
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="text-xs uppercase tracking-widest" style={{ color: "#9a8a6a", fontFamily: "'Cinzel', serif" }}>Bag</span>
+                      <button
+                        onClick={() => setLoadItemOpen(true)}
+                        className="flex items-center gap-1 px-3 py-1 text-xs transition-all hover:opacity-90"
+                        style={{ background: "rgba(196,133,58,0.1)", border: "1px solid rgba(196,133,58,0.3)", borderRadius: 4, color: "#c4853a", fontFamily: "'Cinzel', serif", cursor: "pointer" }}
+                      >
+                        <Plus size={10} /> Paste JSON
+                      </button>
+                    </div>
+
+                    <div className="flex flex-wrap gap-2" style={{ minHeight: 80 }}>
+                      {inventory.map((item) => (
+                        <div
+                          key={item.id}
+                          draggable
+                          onDragStart={() => onItemDragStart(item)}
+                          onClick={() => setSelectedItem(selectedItem?.id === item.id ? null : item)}
+                          className="flex flex-col items-center justify-between cursor-grab select-none transition-all hover:opacity-90"
+                          style={{
+                            width: 76,
+                            height: 76,
+                            background: selectedItem?.id === item.id ? "rgba(196,133,58,0.12)" : "#111008",
+                            border: `1px solid ${selectedItem?.id === item.id ? "rgba(196,133,58,0.5)" : "rgba(196,133,58,0.15)"}`,
+                            borderRadius: 6,
+                            padding: "8px 4px 4px",
+                            position: "relative",
+                          }}
+                        >
+                          <span style={{ fontSize: 22, lineHeight: 1, color: TYPE_COLORS[item.type] }}>{getItemIcon(item)}</span>
+                          <span className="text-center leading-tight w-full truncate px-1" style={{ fontSize: 10, color: "#9a8a6a", fontFamily: "'Cinzel', serif" }}>{item.name}</span>
+                        </div>
+                      ))}
+                      {inventory.length === 0 && (
+                        <span className="text-xs" style={{ color: "#3a3020", fontFamily: "'Cinzel', serif" }}>Empty — drag equipped items here or load new items</span>
+                      )}
+                    </div>
+
+                    {/* Item detail card */}
+                    {selectedItem && (
+                      <div className="mt-3 p-4 relative" style={{ background: "#111008", border: "1px solid rgba(196,133,58,0.25)", borderRadius: 6 }}>
+                        <button onClick={() => setSelectedItem(null)} className="absolute top-2 right-2" style={{ background: "none", border: "none", cursor: "pointer", color: "#6a5a3a" }}>
+                          <X size={12} />
+                        </button>
+                        <div className="flex items-center gap-2 mb-2">
+                          <span style={{ fontSize: 18, color: TYPE_COLORS[selectedItem.type] }}>{getItemIcon(selectedItem)}</span>
+                          <div>
+                            <div className="text-sm font-bold" style={{ fontFamily: "'Cinzel', serif", color: "#e2cfa0" }}>{selectedItem.name}</div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs capitalize" style={{ color: TYPE_COLORS[selectedItem.type], fontFamily: "'Cinzel', serif" }}>{selectedItem.type}</span>
+                              {selectedItem.slot && (
+                                <span className="text-xs px-1.5 py-0.5 rounded" style={{ background: "rgba(196,133,58,0.12)", border: "1px solid rgba(196,133,58,0.25)", color: "#9a8a6a", fontFamily: "'Cinzel', serif" }}>
+                                  {EQUIP_SLOTS.find(s => s.key === selectedItem.slot)?.label ?? selectedItem.slot}
+                                </span>
+                              )}
+                              {selectedItem.slots && selectedItem.slots.map((slotKey) => (
+                                <span key={slotKey} className="text-xs px-1.5 py-0.5 rounded" style={{ background: "rgba(196,133,58,0.12)", border: "1px solid rgba(196,133,58,0.25)", color: "#9a8a6a", fontFamily: "'Cinzel', serif" }}>
+                                  {EQUIP_SLOTS.find(s => s.key === slotKey)?.label ?? slotKey}
+                                </span>
+                              ))}
                             </div>
                           </div>
-                          <button onClick={() => unequipToBack(key)} style={{ background: "none", border: "none", cursor: "pointer", color: "#6a3a3a", padding: 0, flexShrink: 0 }}>
-                            <X size={12} />
-                          </button>
                         </div>
-                      ) : (
-                        <div className="flex items-center px-3 py-2 gap-2">
-                          <span className="text-xs" style={{ color: "#3a3020", fontFamily: "'Cinzel', serif" }}>{label}</span>
-                          <span className="text-xs" style={{ color: "#2a2016", fontFamily: "'Cinzel', serif" }}>— drop here</span>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-
-              {/* Bag */}
-              <div onDragOver={(e) => e.preventDefault()} onDrop={onBagDrop}>
-                <div className="flex items-center justify-between mb-3">
-                  <span className="text-xs uppercase tracking-widest" style={{ color: "#9a8a6a", fontFamily: "'Cinzel', serif" }}>Bag</span>
-                  <button
-                    onClick={() => setLoadItemOpen(true)}
-                    className="flex items-center gap-1 px-3 py-1 text-xs transition-all hover:opacity-90"
-                    style={{ background: "rgba(196,133,58,0.1)", border: "1px solid rgba(196,133,58,0.3)", borderRadius: 4, color: "#c4853a", fontFamily: "'Cinzel', serif", cursor: "pointer" }}
-                  >
-                    <Plus size={10} /> Paste JSON
-                  </button>
-                </div>
-
-                <div className="flex flex-wrap gap-2" style={{ minHeight: 80 }}>
-                  {inventory.map((item) => (
-                    <div
-                      key={item.id}
-                      draggable
-                      onDragStart={() => onItemDragStart(item)}
-                      onClick={() => setSelectedItem(selectedItem?.id === item.id ? null : item)}
-                      className="flex flex-col items-center justify-between cursor-grab select-none transition-all hover:opacity-90"
-                      style={{
-                        width: 76, height: 76,
-                        background: selectedItem?.id === item.id ? "rgba(196,133,58,0.12)" : "#111008",
-                        border: `1px solid ${selectedItem?.id === item.id ? "rgba(196,133,58,0.5)" : "rgba(196,133,58,0.15)"}`,
-                        borderRadius: 6,
-                        padding: "8px 4px 4px",
-                        position: "relative",
-                      }}
-                    >
-                      <span style={{ fontSize: 22, lineHeight: 1, color: TYPE_COLORS[item.type] }}>{getItemIcon(item)}</span>
-                      <span className="text-center leading-tight w-full truncate px-1" style={{ fontSize: 10, color: "#9a8a6a", fontFamily: "'Cinzel', serif" }}>{item.name}</span>
-                    </div>
-                  ))}
-                  {inventory.length === 0 && (
-                    <span className="text-xs" style={{ color: "#3a3020", fontFamily: "'Cinzel', serif" }}>Empty — drag equipped items here or load new items</span>
-                  )}
-                </div>
-
-                {/* Item detail card */}
-                {selectedItem && (
-                  <div className="mt-3 p-4 relative" style={{ background: "#111008", border: "1px solid rgba(196,133,58,0.25)", borderRadius: 6 }}>
-                    <button onClick={() => setSelectedItem(null)} className="absolute top-2 right-2" style={{ background: "none", border: "none", cursor: "pointer", color: "#6a5a3a" }}>
-                      <X size={12} />
-                    </button>
-                    <div className="flex items-center gap-2 mb-2">
-                      <span style={{ fontSize: 18, color: TYPE_COLORS[selectedItem.type] }}>{getItemIcon(selectedItem)}</span>
-                      <div>
-                        <div className="text-sm font-bold" style={{ fontFamily: "'Cinzel', serif", color: "#e2cfa0" }}>{selectedItem.name}</div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs capitalize" style={{ color: TYPE_COLORS[selectedItem.type], fontFamily: "'Cinzel', serif" }}>{selectedItem.type}</span>
-                          {selectedItem.slot && (
-                            <span className="text-xs px-1.5 py-0.5 rounded" style={{ background: "rgba(196,133,58,0.12)", border: "1px solid rgba(196,133,58,0.25)", color: "#9a8a6a", fontFamily: "'Cinzel', serif" }}>
-                              {EQUIP_SLOTS.find(s => s.key === selectedItem.slot)?.label ?? selectedItem.slot}
-                            </span>
+                        <div className="flex flex-wrap gap-3 mb-2">
+                          {usesWeaponLogic(selectedItem) && selectedItem.weaponFormula && (
+                            <span className="text-xs" style={{ color: "#9a8a6a", fontFamily: "'JetBrains Mono', monospace" }}>Formula: {selectedItem.weaponFormula}</span>
                           )}
-                          {selectedItem.slots && selectedItem.slots.map((slotKey) => (
-                            <span key={slotKey} className="text-xs px-1.5 py-0.5 rounded" style={{ background: "rgba(196,133,58,0.12)", border: "1px solid rgba(196,133,58,0.25)", color: "#9a8a6a", fontFamily: "'Cinzel', serif" }}>
-                              {EQUIP_SLOTS.find(s => s.key === slotKey)?.label ?? slotKey}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex flex-wrap gap-3 mb-2">
-                      {usesWeaponLogic(selectedItem) && selectedItem.weaponFormula && (
-                        <span className="text-xs" style={{ color: "#9a8a6a", fontFamily: "'JetBrains Mono', monospace" }}>Formula: {selectedItem.weaponFormula}</span>
-                      )}
-                      {usesWeaponLogic(selectedItem) && selectedItem.die && selectedItem.stat && !selectedItem.weaponFormula && (
-                        <>
-                          <span className="text-xs" style={{ color: "#9a8a6a", fontFamily: "'JetBrains Mono', monospace" }}>Damage: d{selectedItem.die}</span>
-                          <span className="text-xs" style={{ color: "#9a8a6a", fontFamily: "'JetBrains Mono', monospace" }}>Stat: {selectedItem.stat} ({resolveStatValue(selectedItem.stat)})</span>
-                          {selectedItem.damageBonus !== undefined && selectedItem.damageBonus > 0 && (
-                            <span className="text-xs" style={{ color: "#9a8a6a", fontFamily: "'JetBrains Mono', monospace" }}>Bonus: +{selectedItem.damageBonus}</span>
-                          )}
-                        </>
-                      )}
-                      {selectedItem.acBonus !== undefined && selectedItem.acBonus > 0 && (
-                        <span className="text-xs" style={{ color: "#9a8a6a", fontFamily: "'JetBrains Mono', monospace" }}>Phys AC: +{selectedItem.acBonus}</span>
-                      )}
-                      {selectedItem.magicResistBonus !== undefined && selectedItem.magicResistBonus > 0 && (
-                        <span className="text-xs" style={{ color: "#9a8a6a", fontFamily: "'JetBrains Mono', monospace" }}>Magic Res: +{selectedItem.magicResistBonus}</span>
-                      )}
-                      {selectedItem.statBonus && Object.entries(selectedItem.statBonus).map(([s, v]) => (
-                        <span key={s} className="text-xs" style={{ color: "#9a8a6a", fontFamily: "'JetBrains Mono', monospace" }}>{s}: +{v}</span>
-                      ))}
-                      {selectedItem.speedBonus !== undefined && selectedItem.speedBonus > 0 && (
-                        <span className="text-xs" style={{ color: "#9a8a6a", fontFamily: "'JetBrains Mono', monospace" }}>Speed: +{selectedItem.speedBonus}</span>
-                      )}
-                    </div>
-                    {selectedItem.description && (
-                      <p className="text-sm italic mb-2" style={{ color: "#9a8a6a", fontFamily: "'Crimson Pro', serif" }}>{selectedItem.description}</p>
-                    )}
-                    {selectedItem.sacrificeRewards && selectedItem.sacrificeRewards.length > 0 && (
-                      <div className="mb-2">
-                        <div className="text-xs uppercase tracking-widest mb-1" style={{ color: "#c4853a", fontFamily: "'Cinzel', serif" }}>
-                          Sacrifice Rewards
-                        </div>
-                        <div className="flex flex-col gap-1">
-                          {selectedItem.sacrificeRewards.map((reward, index) => (
-                            <div
-                              key={`${selectedItem.id}-reward-${index}`}
-                              className="px-2 py-1 rounded"
-                              style={{ background: "rgba(196,133,58,0.06)", border: "1px solid rgba(196,133,58,0.15)" }}
-                            >
-                              <div className="text-xs" style={{ color: "#e2cfa0", fontFamily: "'Cinzel', serif" }}>
-                                {reward.name}{reward.amount !== undefined ? `: ${reward.amount}` : ""}
-                              </div>
-                              {reward.description && (
-                                <div className="text-[10px]" style={{ color: "#9a8a6a", fontFamily: "'Crimson Pro', serif" }}>
-                                  {reward.description}
-                                </div>
+                          {usesWeaponLogic(selectedItem) && selectedItem.die && selectedItem.stat && !selectedItem.weaponFormula && (
+                            <>
+                              <span className="text-xs" style={{ color: "#9a8a6a", fontFamily: "'JetBrains Mono', monospace" }}>Damage: d{selectedItem.die}</span>
+                              <span className="text-xs" style={{ color: "#9a8a6a", fontFamily: "'JetBrains Mono', monospace" }}>Stat: {selectedItem.stat} ({resolveStatValue(selectedItem.stat)})</span>
+                              {selectedItem.damageBonus !== undefined && selectedItem.damageBonus > 0 && (
+                                <span className="text-xs" style={{ color: "#9a8a6a", fontFamily: "'JetBrains Mono', monospace" }}>Bonus: +{selectedItem.damageBonus}</span>
                               )}
-                            </div>
+                            </>
+                          )}
+                          {selectedItem.acBonus !== undefined && selectedItem.acBonus > 0 && (
+                            <span className="text-xs" style={{ color: "#9a8a6a", fontFamily: "'JetBrains Mono', monospace" }}>Phys AC: +{selectedItem.acBonus}</span>
+                          )}
+                          {selectedItem.magicResistBonus !== undefined && selectedItem.magicResistBonus > 0 && (
+                            <span className="text-xs" style={{ color: "#9a8a6a", fontFamily: "'JetBrains Mono', monospace" }}>Magic Res: +{selectedItem.magicResistBonus}</span>
+                          )}
+                          {selectedItem.statBonus && Object.entries(selectedItem.statBonus).map(([s, v]) => (
+                            <span key={s} className="text-xs" style={{ color: "#9a8a6a", fontFamily: "'JetBrains Mono', monospace" }}>{s}: +{v}</span>
                           ))}
+                          {selectedItem.speedBonus !== undefined && selectedItem.speedBonus > 0 && (
+                            <span className="text-xs" style={{ color: "#9a8a6a", fontFamily: "'JetBrains Mono', monospace" }}>Speed: +{selectedItem.speedBonus}</span>
+                          )}
                         </div>
+                        {selectedItem.description && (
+                          <p className="text-sm italic mb-2" style={{ color: "#9a8a6a", fontFamily: "'Crimson Pro', serif" }}>{selectedItem.description}</p>
+                        )}
+                        {selectedItem.sacrificeRewards && selectedItem.sacrificeRewards.length > 0 && (
+                          <div className="mb-2">
+                            <div className="text-xs uppercase tracking-widest mb-1" style={{ color: "#c4853a", fontFamily: "'Cinzel', serif" }}>
+                              Sacrifice Rewards
+                            </div>
+                            <div className="flex flex-col gap-1">
+                              {selectedItem.sacrificeRewards.map((reward, index) => (
+                                <div
+                                  key={`${selectedItem.id}-reward-${index}`}
+                                  className="px-2 py-1 rounded"
+                                  style={{ background: "rgba(196,133,58,0.06)", border: "1px solid rgba(196,133,58,0.15)" }}
+                                >
+                                  <div className="text-xs" style={{ color: "#e2cfa0", fontFamily: "'Cinzel', serif" }}>
+                                    {reward.name}{reward.amount !== undefined ? `: ${reward.amount}` : ""}
+                                  </div>
+                                  {reward.description && (
+                                    <div className="text-[10px]" style={{ color: "#9a8a6a", fontFamily: "'Crimson Pro', serif" }}>
+                                      {reward.description}
+                                    </div>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        <button onClick={() => removeFromBag(selectedItem.id)}
+                          className="text-xs hover:opacity-80 transition-opacity"
+                          style={{ color: "#8b1c1c", fontFamily: "'Cinzel', serif", background: "none", border: "none", cursor: "pointer", padding: 0 }}>
+                          Remove from bag
+                        </button>
                       </div>
                     )}
-                    <button onClick={() => removeFromBag(selectedItem.id)}
-                      className="text-xs hover:opacity-80 transition-opacity"
-                      style={{ color: "#8b1c1c", fontFamily: "'Cinzel', serif", background: "none", border: "none", cursor: "pointer", padding: 0 }}>
-                      Remove from bag
-                    </button>
                   </div>
-                )}
+                </div>
+              </div>
+            </>
+          ) : (
+            <div style={panelStyle}>
+              <div className="flex items-center justify-between">
+                <div className="text-xs uppercase tracking-widest flex items-center gap-2" style={{ color: "#9a8a6a", fontFamily: "'Cinzel', serif" }}>
+                  <Package size={12} style={{ color: "#c4853a" }} /> Inventory
+                </div>
+                <button
+                  onClick={() => setInventoryPanelVisible(true)}
+                  className="px-2.5 py-1 text-[10px] uppercase tracking-widest transition-all hover:opacity-90"
+                  style={{ background: "rgba(196,133,58,0.12)", border: "1px solid rgba(196,133,58,0.3)", borderRadius: 4, color: "#c4853a", fontFamily: "'Cinzel', serif", cursor: "pointer" }}
+                >
+                  Open
+                </button>
+              </div>
+              <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
+                <div className="rounded px-2 py-2" style={{ background: "rgba(196,133,58,0.08)", border: "1px solid rgba(196,133,58,0.18)", color: "#e2cfa0" }}>
+                  <div className="text-[10px] uppercase tracking-widest" style={{ color: "#9a8a6a" }}>Items</div>
+                  <div className="mt-1 font-semibold">{inventory.length}</div>
+                </div>
+                <div className="rounded px-2 py-2" style={{ background: "rgba(196,133,58,0.08)", border: "1px solid rgba(196,133,58,0.18)", color: "#e2cfa0" }}>
+                  <div className="text-[10px] uppercase tracking-widest" style={{ color: "#9a8a6a" }}>Gold</div>
+                  <div className="mt-1 font-semibold">{gold}</div>
+                </div>
+                <div className="rounded px-2 py-2" style={{ background: "rgba(196,133,58,0.08)", border: "1px solid rgba(196,133,58,0.18)", color: "#e2cfa0" }}>
+                  <div className="text-[10px] uppercase tracking-widest" style={{ color: "#9a8a6a" }}>Equipped</div>
+                  <div className="mt-1 font-semibold">{Object.values(equipment).filter(Boolean).length}</div>
+                </div>
+                <div className="rounded px-2 py-2" style={{ background: "rgba(196,133,58,0.08)", border: "1px solid rgba(196,133,58,0.18)", color: "#e2cfa0" }}>
+                  <div className="text-[10px] uppercase tracking-widest" style={{ color: "#9a8a6a" }}>Selected</div>
+                  <div className="mt-1 font-semibold text-xs truncate">{selectedItem ? selectedItem.name : "None"}</div>
+                </div>
               </div>
             </div>
-          </div>
+          )}
 
           <div style={{ ...panelStyle, alignSelf: "start" }}>
             <div className="flex items-center justify-between mb-4">
@@ -3611,8 +3748,6 @@ export default function App() {
                   </div>
                 ))}
             </div>
-
-
 
             <div className="mt-4 pt-4" style={{ borderTop: "1px solid rgba(196,133,58,0.12)" }}>
               <div className="flex items-center justify-between mb-3">
@@ -4536,6 +4671,23 @@ export default function App() {
               </button>
               <button onClick={importItemsFromText} className="px-4 py-2 text-sm font-semibold" style={{ background: "linear-gradient(135deg, #1a1208, #241a0c)", border: "1px solid rgba(196,133,58,0.4)", borderRadius: 4, color: "#c4853a", fontFamily: "'Cinzel', serif", cursor: "pointer" }}>
                 Import
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {hidePrompt && (
+        <div className="fixed inset-0 flex items-center justify-center z-60" style={{ background: "rgba(0,0,0,0.7)" }} onClick={() => setHidePrompt(null)}>
+          <div className="p-6 flex flex-col gap-4 w-full max-w-sm" style={{ background: "#0e0c08", border: "1px solid rgba(196,133,58,0.4)", borderRadius: 8 }} onClick={(e) => e.stopPropagation()}>
+            <div className="text-base font-bold" style={{ fontFamily: "'Cinzel', serif", color: "#c4853a" }}>Hide this ability?</div>
+            <div className="text-sm" style={{ color: "#9a8a6a", fontFamily: "'Crimson Pro', serif" }}>{hidePrompt?.label}</div>
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setHidePrompt(null)} className="px-4 py-2 text-sm" style={{ background: "#111008", border: "1px solid rgba(196,133,58,0.2)", borderRadius: 4, color: "#9a8a6a", fontFamily: "'Cinzel', serif", cursor: "pointer" }}>
+                No
+              </button>
+              <button onClick={confirmHidePrompt} className="px-4 py-2 text-sm font-semibold" style={{ background: "linear-gradient(135deg, #1a1208, #241a0c)", border: "1px solid rgba(196,133,58,0.4)", borderRadius: 4, color: "#c4853a", fontFamily: "'Cinzel', serif", cursor: "pointer" }}>
+                Yes
               </button>
             </div>
           </div>
