@@ -168,6 +168,7 @@ const STAT_LABELS: StatKey[] = ["PHYS", "CON", "INT", "SOC"];
 const STAT_COLORS: Record<StatKey, string> = {
   PHYS: "#c4853a", CON: "#e05050", INT: "#6a9ae0", SOC: "#e0b040",
 };
+const CUSTOM_DICE_SIDES = [4, 6, 8, 10, 12, 20, 100] as const;
 
 const TYPE_ICONS: Record<ItemType, string> = {
   weapon: "⚔", armor: "🛡", accessory: "✦", consumable: "⬡",
@@ -514,6 +515,7 @@ export default function App() {
 
   const [log, setLog] = useState<LogEntry[]>([]);
   const [nextId, setNextId] = useState(1);
+  const nextLogIdRef = useRef(1);
   const [journalEntries, setJournalEntries] = useState<JournalEntry[]>([{ id: 1, text: "" }]);
   const [currentJournalIndex, setCurrentJournalIndex] = useState(0);
   const [nextJournalEntryId, setNextJournalEntryId] = useState(2);
@@ -661,6 +663,29 @@ export default function App() {
       return normalized.length > 0 ? normalized : [{ id: 1, text: "" }];
     };
 
+    const normalizeLogEntries = (raw: any): LogEntry[] => {
+      if (!Array.isArray(raw)) return [];
+      return raw
+        .filter((entry) => entry && typeof entry === "object")
+        .map((entry: any, index: number) => {
+          const parsedId = Number(entry?.id);
+          const parsedType = entry?.type;
+          const type: LogEntry["type"] =
+            parsedType === "hit"
+            || parsedType === "miss"
+            || parsedType === "crit"
+            || parsedType === "heal"
+            || parsedType === "info"
+              ? parsedType
+              : "info";
+          return {
+            id: Number.isFinite(parsedId) && parsedId >= 0 ? Math.floor(parsedId) : index + 1,
+            text: typeof entry?.text === "string" ? entry.text : "",
+            type,
+          };
+        });
+    };
+
     if (d.characterName !== undefined) setCharacterName(d.characterName);
     if (d.selectedClass !== undefined) {
       const incomingClass = d.selectedClass as string;
@@ -672,8 +697,18 @@ export default function App() {
     if (d.statBonuses !== undefined) setStatBonuses(normalizeStatsObject(d.statBonuses));
     if (d.maxHp !== undefined) setMaxHp(d.maxHp);
     if (d.currentHp !== undefined) setCurrentHp(d.currentHp);
-    if (d.log !== undefined) setLog(d.log);
-    if (d.nextId !== undefined) setNextId(d.nextId);
+    const incomingLogEntries = d.log !== undefined ? normalizeLogEntries(d.log) : log;
+    if (d.log !== undefined) setLog(incomingLogEntries);
+    if (d.nextId !== undefined || d.log !== undefined) {
+      const logFallbackNextId = Math.max(0, ...incomingLogEntries.map((entry) => entry.id)) + 1;
+      const rawNextLogId = Number(d.nextId);
+      const parsedNextLogId = d.nextId !== undefined && Number.isFinite(rawNextLogId)
+        ? Math.floor(rawNextLogId)
+        : logFallbackNextId;
+      const normalizedNextLogId = Math.max(logFallbackNextId, parsedNextLogId, 1);
+      nextLogIdRef.current = normalizedNextLogId;
+      setNextId(normalizedNextLogId);
+    }
     const incomingJournalEntries = d.journalEntries !== undefined
       ? normalizeJournalEntries(d.journalEntries)
       : journalEntries;
@@ -779,10 +814,24 @@ export default function App() {
     e.currentTarget.value = "";
   };
 
+  useEffect(() => {
+    const safeNextId = Number.isFinite(nextId) ? Math.max(1, Math.floor(nextId)) : 1;
+    nextLogIdRef.current = safeNextId;
+  }, [nextId]);
+
   // ─── HP ──────────────────────────────────────────────────────────────────
   const addLog = (text: string, type: LogEntry["type"]) => {
-    setLog((prev) => [{ id: nextId, text, type }, ...prev].slice(0, 40));
-    setNextId((n) => n + 1);
+    const entryId = nextLogIdRef.current;
+    const nextLogId = entryId + 1;
+    nextLogIdRef.current = nextLogId;
+    setLog((prev) => [{ id: entryId, text, type }, ...prev].slice(0, 40));
+    setNextId(nextLogId);
+  };
+
+  const clearDiceLog = () => {
+    nextLogIdRef.current = 1;
+    setLog([]);
+    setNextId(1);
   };
 
   const updateCurrentJournalEntry = (text: string) => {
@@ -1130,6 +1179,11 @@ export default function App() {
     } else {
       addLog(`Initiative — d20 (${roll}) + PHYS (${effectiveStats.PHYS}) = ${total}`, "info");
     }
+  };
+
+  const rollCustomDie = (sides: number) => {
+    const roll = rollD(sides);
+    addLog(`Custom roll — d${sides} (${roll})`, "info");
   };
 
   const applyWeaponHealing = (item: InventoryItem) => {
@@ -2598,6 +2652,32 @@ export default function App() {
                   )}
                 </div>
               )}
+
+              <div className="mt-3 pt-3" style={{ borderTop: "1px solid rgba(196,133,58,0.12)" }}>
+                <div className="text-[11px] uppercase tracking-widest mb-2" style={{ color: "#9a8a6a", fontFamily: "'Cinzel', serif" }}>
+                  Custom Dice
+                </div>
+                <div className="grid grid-cols-4 gap-1.5">
+                  {CUSTOM_DICE_SIDES.map((sides) => (
+                    <button
+                      key={sides}
+                      type="button"
+                      onClick={() => rollCustomDie(sides)}
+                      className="px-2 py-1 text-[11px] uppercase tracking-widest transition-all hover:opacity-90 active:scale-95"
+                      style={{
+                        background: "rgba(196,133,58,0.12)",
+                        border: "1px solid rgba(196,133,58,0.35)",
+                        borderRadius: 4,
+                        color: "#c4853a",
+                        fontFamily: "'Cinzel', serif",
+                        cursor: "pointer",
+                      }}
+                    >
+                      {`d${sides}`}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
 
@@ -3287,7 +3367,7 @@ export default function App() {
                 <span className="text-xs uppercase tracking-widest flex items-center gap-2" style={{ color: "#9a8a6a", fontFamily: "'Cinzel', serif" }}>
                   <Scroll size={12} style={{ color: "#c4853a" }} /> Dice Log
                 </span>
-                <button onClick={() => { setLog([]); setNextId(0); }}
+                <button onClick={clearDiceLog}
                   className="text-xs hover:opacity-70 transition-opacity" style={{ color: "#9a8a6a", fontFamily: "'Cinzel', serif", cursor: "pointer", background: "none", border: "none" }}>Clear</button>
               </div>
               <div className="flex flex-col gap-1.5 overflow-y-auto" style={{ maxHeight: 220, scrollbarWidth: "thin", scrollbarColor: "rgba(196,133,58,0.2) transparent" }}>
