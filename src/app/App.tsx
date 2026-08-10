@@ -264,6 +264,16 @@ interface CombatPlayer {
   initiative: number;
 }
 
+interface FightMonsterEntry {
+  uid: string;
+  def: MonsterDef;
+}
+
+const createFightMonsterEntry = (def: MonsterDef): FightMonsterEntry => ({
+  uid: `fm-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+  def,
+});
+
 function monsterPower(m: MonsterDef): number {
   const statSum = Object.values(m.stats).reduce((a, b) => a + b, 0);
   return statSum + Math.round(m.hp / 5) + m.ac;
@@ -286,6 +296,36 @@ const getMonsterTier = (monster: MonsterDef): MonsterTier => {
   if (power <= 40) return "Medium";
   if (power <= 70) return "Hard";
   return "Deadly";
+};
+
+const toAlphabetSuffix = (index: number): string => {
+  let value = index;
+  let suffix = "";
+  while (value > 0) {
+    value -= 1;
+    suffix = String.fromCharCode(97 + (value % 26)) + suffix;
+    value = Math.floor(value / 26);
+  }
+  return suffix;
+};
+
+const withDuplicateFightNames = (entries: FightMonsterEntry[]): Array<FightMonsterEntry & { displayName: string }> => {
+  const counts = new Map<string, number>();
+  entries.forEach((entry) => {
+    const key = (entry.def.name || "Monster").trim().toLowerCase();
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  });
+
+  const seen = new Map<string, number>();
+  return entries.map((entry) => {
+    const baseName = (entry.def.name || "Monster").trim() || "Monster";
+    const key = baseName.toLowerCase();
+    const duplicateCount = counts.get(key) ?? 0;
+    if (duplicateCount <= 1) return { ...entry, displayName: baseName };
+    const index = (seen.get(key) ?? 0) + 1;
+    seen.set(key, index);
+    return { ...entry, displayName: `${baseName} ${toAlphabetSuffix(index)}` };
+  });
 };
 
 function rollD(sides: number) {
@@ -499,8 +539,8 @@ export default function App() {
 
   // ─── Fight menu ───────────────────────────────────────────────────────────
   const [fightMenuOpen, setFightMenuOpen] = useState(false);
-  const [fightAllies, setFightAllies] = useState<MonsterDef[]>([]);
-  const [fightCombatants, setFightCombatants] = useState<MonsterDef[]>([]);
+  const [fightAllies, setFightAllies] = useState<FightMonsterEntry[]>([]);
+  const [fightCombatants, setFightCombatants] = useState<FightMonsterEntry[]>([]);
   const fightDragId = useRef<string | null>(null);
   const fightDragFrom = useRef<"roster" | "allies" | "combatants">("roster");
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -595,8 +635,8 @@ export default function App() {
       longRestRoll,
       longRestSafe,
       fightMenuOpen,
-      fightAllies,
-      fightCombatants,
+      fightAllies: fightAllies.map((entry) => entry.def),
+      fightCombatants: fightCombatants.map((entry) => entry.def),
       combatPlayers,
       round,
       turnIndex,
@@ -805,8 +845,14 @@ export default function App() {
     if (d.longRestRoll !== undefined) setLongRestRoll(d.longRestRoll);
     if (d.longRestSafe !== undefined) setLongRestSafe(d.longRestSafe);
     if (d.fightMenuOpen !== undefined) setFightMenuOpen(d.fightMenuOpen);
-    if (d.fightAllies !== undefined) setFightAllies(normalizeMonsterCollection(d.fightAllies));
-    if (d.fightCombatants !== undefined) setFightCombatants(normalizeMonsterCollection(d.fightCombatants));
+    if (d.fightAllies !== undefined) {
+      const alliesRaw = Array.isArray(d.fightAllies) ? d.fightAllies.map((entry: any) => entry?.def ?? entry) : [];
+      setFightAllies(normalizeMonsterCollection(alliesRaw).map(createFightMonsterEntry));
+    }
+    if (d.fightCombatants !== undefined) {
+      const combatantsRaw = Array.isArray(d.fightCombatants) ? d.fightCombatants.map((entry: any) => entry?.def ?? entry) : [];
+      setFightCombatants(normalizeMonsterCollection(combatantsRaw).map(createFightMonsterEntry));
+    }
     if (d.combatPlayers !== undefined) setCombatPlayers(d.combatPlayers);
     if (d.round !== undefined) setRound(d.round);
     if (d.turnIndex !== undefined) setTurnIndex(d.turnIndex);
@@ -1692,27 +1738,43 @@ export default function App() {
     const from = fightDragFrom.current;
     if (!id) return;
 
-    const def = BASE_MONSTER_REGISTRY.find((m) => m.id === id)
-      ?? fightAllies.find((m) => m.id === id)
-      ?? fightCombatants.find((m) => m.id === id);
-    if (!def) return;
+    if (from === target) {
+      fightDragId.current = null;
+      return;
+    }
 
-    if (from === "allies") setFightAllies((p) => p.filter((m) => m.id !== id));
-    if (from === "combatants") setFightCombatants((p) => p.filter((m) => m.id !== id));
+    if (from === "roster") {
+      const def = BASE_MONSTER_REGISTRY.find((m) => m.id === id);
+      if (!def) return;
 
-    if (target === "allies") setFightAllies((p) => [...p, def]);
-    else setFightCombatants((p) => [...p, def]);
+      const nextEntry = createFightMonsterEntry(def);
+      if (target === "allies") setFightAllies((p) => [...p, nextEntry]);
+      else setFightCombatants((p) => [...p, nextEntry]);
+
+      fightDragId.current = null;
+      return;
+    }
+
+    const sourceEntries = from === "allies" ? fightAllies : fightCombatants;
+    const movingEntry = sourceEntries.find((entry) => entry.uid === id);
+    if (!movingEntry) return;
+
+    if (from === "allies") setFightAllies((p) => p.filter((entry) => entry.uid !== id));
+    else setFightCombatants((p) => p.filter((entry) => entry.uid !== id));
+
+    if (target === "allies") setFightAllies((p) => [...p, movingEntry]);
+    else setFightCombatants((p) => [...p, movingEntry]);
 
     fightDragId.current = null;
   };
 
   const removeFromFightColumn = (id: string, col: "allies" | "combatants") => {
-    if (col === "allies") setFightAllies((p) => p.filter((m) => m.id !== id));
-    else setFightCombatants((p) => p.filter((m) => m.id !== id));
+    if (col === "allies") setFightAllies((p) => p.filter((entry) => entry.uid !== id));
+    else setFightCombatants((p) => p.filter((entry) => entry.uid !== id));
   };
 
   const startCombat = () => {
-    const allies: CombatMonster[] = fightAllies.map((def) => ({
+    const allies: CombatMonster[] = fightAllies.map(({ def }) => ({
       uid: `${def.id}-${Math.random().toString(36).slice(2)}`,
       def,
       side: "ally",
@@ -1720,7 +1782,7 @@ export default function App() {
       initiative: rollD(20) + def.stats.PHYS,
       runtime: buildMonsterRuntime(def),
     }));
-    const enemies: CombatMonster[] = fightCombatants.map((def) => ({
+    const enemies: CombatMonster[] = fightCombatants.map(({ def }) => ({
       uid: `${def.id}-${Math.random().toString(36).slice(2)}`,
       def,
       side: "enemy",
@@ -1757,7 +1819,7 @@ export default function App() {
     setCombatLog((prev) => [`⚔ Combat begins — Round 1`, ...prev].slice(0, 60));
   };
 
-  const combatTotalPower = fightCombatants.reduce((s, m) => s + monsterPower(m), 0);
+  const combatTotalPower = fightCombatants.reduce((s, m) => s + monsterPower(m.def), 0);
   const diff = difficultyLabel(combatTotalPower);
   const rosterTierMeta: Record<MonsterTier, { label: string; color: string }> = {
     Easy: { label: "Easy", color: "#6aaa6a" },
@@ -1770,6 +1832,8 @@ export default function App() {
     ...rosterTierMeta[tier],
     monsters: BASE_MONSTER_REGISTRY.filter((monster) => getMonsterTier(monster) === tier),
   }));
+  const fightAlliesWithNames = withDuplicateFightNames(fightAllies);
+  const fightCombatantsWithNames = withDuplicateFightNames(fightCombatants);
 
   const logCombat = (msg: string) => setCombatLog((p) => [msg, ...p].slice(0, 60));
 
@@ -4147,7 +4211,42 @@ export default function App() {
               {/* Roster */}
               <div className="flex flex-col w-52 shrink-0 overflow-y-auto" style={{ borderRight: "1px solid rgba(196,133,58,0.1)", padding: "16px 12px" }}>
                 <div className="text-xs uppercase tracking-widest mb-3" style={{ color: "#9a8a6a", fontFamily: "'Cinzel', serif" }}>Players</div>
-                <div className="text-xs italic mb-4" style={{ color: "#3a3020", fontFamily: "'Crimson Pro', serif" }}>No players configured</div>
+                {combatPlayers.length === 0 ? (
+                  <div className="text-xs italic mb-2" style={{ color: "#3a3020", fontFamily: "'Crimson Pro', serif" }}>No players configured</div>
+                ) : (
+                  <div className="flex flex-col gap-1.5 mb-2">
+                    {combatPlayers.map((cp) => (
+                      <div key={cp.uid} className="flex items-center gap-1.5">
+                        <input
+                          value={cp.name}
+                          onChange={(e) => setCombatPlayers((p) => p.map((entry) => entry.uid === cp.uid ? { ...entry, name: e.target.value } : entry))}
+                          placeholder="Player name"
+                          className="flex-1 px-2 py-1 text-xs outline-none"
+                          style={{ background: "#171208", border: "1px solid rgba(196,133,58,0.25)", borderRadius: 4, color: "#e2cfa0", fontFamily: "'Cinzel', serif" }}
+                        />
+                        <button
+                          onClick={() => setCombatPlayers((p) => p.filter((entry) => entry.uid !== cp.uid))}
+                          disabled={combatPlayers.length <= 1}
+                          style={{
+                            background: "none",
+                            border: "none",
+                            cursor: combatPlayers.length > 1 ? "pointer" : "default",
+                            color: combatPlayers.length > 1 ? "#6a3a3a" : "#3a3020",
+                          }}
+                        >
+                          <X size={11} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <button
+                  onClick={() => setCombatPlayers((p) => [...p, { uid: `cp${Date.now()}`, name: `Player ${p.length + 1}`, currentHp: 0, maxHp: 0, initiative: 0 }])}
+                  className="text-xs text-left hover:opacity-80 mb-4"
+                  style={{ color: "#9a8a6a", fontFamily: "'Cinzel', serif", background: "none", border: "none", cursor: "pointer" }}
+                >
+                  + Add player
+                </button>
 
                 <div className="text-xs uppercase tracking-widest mb-3" style={{ color: "#9a8a6a", fontFamily: "'Cinzel', serif" }}>Monsters</div>
                 <div className="flex flex-col gap-3">
@@ -4194,17 +4293,20 @@ export default function App() {
                   <div className="flex-1 flex items-center justify-center text-xs" style={{ color: "#3a3020", fontFamily: "'Cinzel', serif", border: "1px dashed rgba(196,133,58,0.1)", borderRadius: 6, minHeight: 80 }}>Drop here</div>
                 )}
                 <div className="flex flex-col gap-1.5">
-                  {fightAllies.map((m) => (
-                    <div key={m.id} draggable onDragStart={() => startFightDrag(m.id, "allies")}
+                  {fightAlliesWithNames.map((entry) => {
+                    const m = entry.def;
+                    return (
+                    <div key={entry.uid} draggable onDragStart={() => startFightDrag(entry.uid, "allies")}
                       className="flex items-center justify-between px-3 py-2 cursor-grab"
                       style={{ background: "#111a10", border: "1px solid rgba(106,170,106,0.25)", borderRadius: 4 }}>
                       <div>
-                        <div className="text-sm" style={{ fontFamily: "'Cinzel', serif", color: "#e2cfa0" }}>{m.name}</div>
+                        <div className="text-sm" style={{ fontFamily: "'Cinzel', serif", color: "#e2cfa0" }}>{entry.displayName}</div>
                         <div className="text-xs" style={{ color: "#9a8a6a", fontFamily: "'JetBrains Mono', monospace" }}>HP {m.hp} · AC {m.ac}</div>
                       </div>
-                      <button onClick={() => removeFromFightColumn(m.id, "allies")} style={{ background: "none", border: "none", cursor: "pointer", color: "#6a3a3a" }}><X size={11} /></button>
+                      <button onClick={() => removeFromFightColumn(entry.uid, "allies")} style={{ background: "none", border: "none", cursor: "pointer", color: "#6a3a3a" }}><X size={11} /></button>
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
 
@@ -4223,17 +4325,18 @@ export default function App() {
                   <div className="flex-1 flex items-center justify-center text-xs" style={{ color: "#3a3020", fontFamily: "'Cinzel', serif", border: "1px dashed rgba(196,133,58,0.1)", borderRadius: 6, minHeight: 80 }}>Drop enemies here</div>
                 )}
                 <div className="flex flex-col gap-1.5">
-                  {fightCombatants.map((m) => {
+                  {fightCombatantsWithNames.map((entry) => {
+                    const m = entry.def;
                     const pw = monsterPower(m);
                     return (
-                      <div key={m.id} draggable onDragStart={() => startFightDrag(m.id, "combatants")}
+                      <div key={entry.uid} draggable onDragStart={() => startFightDrag(entry.uid, "combatants")}
                         className="flex items-center justify-between px-3 py-2 cursor-grab"
                         style={{ background: "#1a1008", border: "1px solid rgba(139,28,28,0.3)", borderRadius: 4 }}>
                         <div>
-                          <div className="text-sm" style={{ fontFamily: "'Cinzel', serif", color: "#e2cfa0" }}>{m.name}</div>
+                          <div className="text-sm" style={{ fontFamily: "'Cinzel', serif", color: "#e2cfa0" }}>{entry.displayName}</div>
                           <div className="text-xs" style={{ color: "#9a8a6a", fontFamily: "'JetBrains Mono', monospace" }}>HP {m.hp} · AC {m.ac} · Power {pw}</div>
                         </div>
-                        <button onClick={() => removeFromFightColumn(m.id, "combatants")} style={{ background: "none", border: "none", cursor: "pointer", color: "#6a3a3a" }}><X size={11} /></button>
+                        <button onClick={() => removeFromFightColumn(entry.uid, "combatants")} style={{ background: "none", border: "none", cursor: "pointer", color: "#6a3a3a" }}><X size={11} /></button>
                       </div>
                     );
                   })}
