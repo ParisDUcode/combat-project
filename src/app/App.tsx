@@ -544,6 +544,7 @@ export default function App() {
   const [fighterDashActive, setFighterDashActive] = useState(false);
   const [fighterDashUsedThisTurn, setFighterDashUsedThisTurn] = useState(false);
   const [wizardSpellSlots, setWizardSpellSlots] = useState(2);
+  const [wizardCounterspellCharges, setWizardCounterspellCharges] = useState(0);
   const [wizardSignatureSpellPromptOpen, setWizardSignatureSpellPromptOpen] = useState(false);
   const [wizardSignatureSpellAcknowledged, setWizardSignatureSpellAcknowledged] = useState(false);
 
@@ -648,6 +649,7 @@ export default function App() {
       fighterDashActive,
       fighterDashUsedThisTurn,
       wizardSpellSlots,
+      wizardCounterspellCharges,
       wizardSignatureSpellPromptOpen,
       wizardSignatureSpellAcknowledged,
       damageInput,
@@ -858,6 +860,7 @@ export default function App() {
     if (d.fighterDashActive !== undefined) setFighterDashActive(Boolean(d.fighterDashActive));
     if (d.fighterDashUsedThisTurn !== undefined) setFighterDashUsedThisTurn(Boolean(d.fighterDashUsedThisTurn));
     if (d.wizardSpellSlots !== undefined) setWizardSpellSlots(d.wizardSpellSlots);
+    if (d.wizardCounterspellCharges !== undefined) setWizardCounterspellCharges(Number(d.wizardCounterspellCharges) || 0);
     if (d.wizardSignatureSpellPromptOpen !== undefined) setWizardSignatureSpellPromptOpen(Boolean(d.wizardSignatureSpellPromptOpen));
     if (d.wizardSignatureSpellAcknowledged !== undefined) setWizardSignatureSpellAcknowledged(Boolean(d.wizardSignatureSpellAcknowledged));
     if (d.damageInput !== undefined) setDamageInput(d.damageInput);
@@ -1959,6 +1962,14 @@ export default function App() {
     addLog("Signature Spell — the signature spell menu is ready for your next choice.", "info");
   };
 
+  const useCounterspell = () => {
+    if (selectedClass !== "Wizard" || levelNumber < 7 || wizardCounterspellCharges <= 0) return;
+
+    setWizardCounterspellCharges((prev) => prev - 1);
+    setWizardSpellSlots((prev) => prev + 1);
+    addLog("🛡 Counterspell — you captured spell slots from an enemy spellcaster's casting.", "info");
+  };
+
   const doLongRestRoll = () => {
     const roll = rollD(20);
     const total = roll + effectiveStats.INT;
@@ -1971,11 +1982,13 @@ export default function App() {
     const max = typeof maxHp === "number" ? maxHp : 0;
     const lvl = level === "" ? 1 : Number(level);
     const secondWindCharges = 2 + Math.floor(lvl / 5);
+    const counterspellCharges = lvl >= 7 ? Math.floor((lvl - 7) / 2) + 1 : 0;
     setCurrentHp(max);
     setSecondWindUses(secondWindCharges);
     setFighterDashActive(false);
     setFighterDashUsedThisTurn(false);
     setWizardSpellSlots(Math.max(1, lvl + 1));
+    setWizardCounterspellCharges(counterspellCharges);
     addLog("Long rest completed — HP fully restored, abilities refreshed.", "heal");
     // restore weapon charges
     const restoreCharges = (item: InventoryItem): InventoryItem => {
@@ -2382,6 +2395,7 @@ export default function App() {
   const baseSpeed = selectedClass === "Fighter" ? 3 : selectedClass === "Wizard" ? 2 : 0;
   const speed = baseSpeed + equippedItems.reduce((sum, item) => sum + (item.speedBonus ?? 0), 0);
   const displaySpeed = fighterDashActive ? speed * 2 : speed;
+  const wizardCounterspellMaxCharges = selectedClass === "Wizard" && levelNumber >= 7 ? Math.floor((levelNumber - 7) / 2) + 1 : 0;
   const initiative = effectiveStats.PHYS;
   const levelNumber = level === "" ? 1 : Number(level);
   const fighterActionCount = selectedClass === "Fighter"
@@ -2416,6 +2430,12 @@ export default function App() {
       setWizardSignatureSpellPromptOpen(true);
     }
   }, [selectedClass, levelNumber, wizardSignatureSpellAcknowledged]);
+
+  useEffect(() => {
+    if (selectedClass !== "Wizard") return;
+    const nextMax = levelNumber >= 7 ? Math.floor((levelNumber - 7) / 2) + 1 : 0;
+    setWizardCounterspellCharges((prev) => Math.max(prev, nextMax));
+  }, [selectedClass, levelNumber]);
 
   // ─── Derived ─────────────────────────────────────────────────────────────
   const hpNum = typeof currentHp === "number" ? currentHp : 0;
@@ -3338,7 +3358,41 @@ export default function App() {
                     </div>
                   )}
                 </div>
-              ) : selectedClass === "Wizard" ? null : selectedClass ? (
+              ) : selectedClass === "Wizard" ? (
+                <div className="flex flex-col gap-2">
+                  <div style={{ background: "#111008", border: "1px solid rgba(106,154,224,0.18)", borderRadius: 5, padding: "10px 12px" }}>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-sm font-bold" style={{ fontFamily: "'Cinzel', serif", color: "#e2cfa0" }}>Counterspell</span>
+                      <div className="flex gap-1">
+                        {Array.from({ length: wizardCounterspellMaxCharges }).map((_, i) => (
+                          <div key={i} style={{ width: 10, height: 10, borderRadius: "50%", background: i < wizardCounterspellCharges ? "#6a9ae0" : "#1a1a2a", border: "1px solid rgba(106,154,224,0.3)" }} />
+                        ))}
+                      </div>
+                    </div>
+                    <p className="text-xs mb-2" style={{ color: "#9a8a6a", fontFamily: "'Crimson Pro', serif" }}>
+                      Reaction: when an enemy spellcaster is interrupted, capture their spell slots and gain them as available spell slots.
+                    </p>
+                    <button
+                      onClick={useCounterspell}
+                      disabled={levelNumber < 7 || wizardCounterspellCharges === 0}
+                      className="w-full py-1.5 text-xs font-semibold transition-all hover:opacity-90 active:scale-95"
+                      style={{
+                        background: levelNumber >= 7 && wizardCounterspellCharges > 0 ? "rgba(106,154,224,0.12)" : "rgba(255,255,255,0.03)",
+                        border: `1px solid ${levelNumber >= 7 && wizardCounterspellCharges > 0 ? "rgba(106,154,224,0.4)" : "rgba(255,255,255,0.06)"}`,
+                        borderRadius: 4,
+                        color: levelNumber >= 7 && wizardCounterspellCharges > 0 ? "#6a9ae0" : "#3a3020",
+                        fontFamily: "'Cinzel', serif",
+                        cursor: levelNumber >= 7 && wizardCounterspellCharges > 0 ? "pointer" : "default",
+                      }}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span>{levelNumber < 7 ? "Unlocks at level 7" : wizardCounterspellCharges > 0 ? `Use Counterspell (${wizardCounterspellCharges} left)` : "No charges left"}</span>
+                        <ActionCostBadge cost="bonus" />
+                      </div>
+                    </button>
+                  </div>
+                </div>
+              ) : selectedClass ? (
                 <p className="text-xs italic" style={{ color: "#3a3020", fontFamily: "'Crimson Pro', serif" }}>
                   Abilities for {selectedClass} coming soon.
                 </p>
