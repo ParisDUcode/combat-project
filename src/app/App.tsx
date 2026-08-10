@@ -1956,23 +1956,7 @@ export default function App() {
   const startWizardSignatureSpell = () => {
     setWizardSignatureSpellAcknowledged(true);
     setWizardSignatureSpellPromptOpen(false);
-
-    const signatureSpell: Spell = {
-      id: nextSpellId,
-      name: "Signature Spell Draft",
-      type: "Ability",
-      description: "A personal spell that grows and evolves with your legend.",
-      isSpell: true,
-      slotCost: 1,
-      slotCostMax: 3,
-      scaleDamageBySlots: true,
-      damageDie: 6,
-      damageStat: "INT",
-    };
-
-    setSpells((prev) => [...prev, signatureSpell]);
-    setNextSpellId((prev) => prev + 1);
-    addLog("Signature Spell — your first draft is ready to evolve over time.", "info");
+    addLog("Signature Spell — the signature spell menu is ready for your next choice.", "info");
   };
 
   const doLongRestRoll = () => {
@@ -5042,16 +5026,16 @@ export default function App() {
       {wizardSignatureSpellPromptOpen && (
         <div className="fixed inset-0 flex items-center justify-center z-60" style={{ background: "rgba(0,0,0,0.78)" }} onClick={() => { setWizardSignatureSpellPromptOpen(false); setWizardSignatureSpellAcknowledged(true); }}>
           <div className="p-6 flex flex-col gap-4 w-full max-w-md" style={{ background: "#0e0c08", border: "1px solid rgba(106,154,224,0.4)", borderRadius: 8 }} onClick={(e) => e.stopPropagation()}>
-            <div className="text-base font-bold" style={{ fontFamily: "'Cinzel', serif", color: "#6a9ae0" }}>Signature Spell</div>
+            <div className="text-base font-bold" style={{ fontFamily: "'Cinzel', serif", color: "#6a9ae0" }}>Signature Spell Menu</div>
             <div className="text-sm" style={{ color: "#9a8a6a", fontFamily: "'Crimson Pro', serif" }}>
-              At level 5, your wizard can begin a personal spell that grows and evolves over time. Shape its identity, add new effects as your legend deepens, and let the spell become the signature of your character.
+              This opens the signature spell setup flow. No spell is created yet; it simply opens the menu for your next choice.
             </div>
             <div className="flex justify-end gap-2">
               <button onClick={() => { setWizardSignatureSpellPromptOpen(false); setWizardSignatureSpellAcknowledged(true); }} className="px-4 py-2 text-sm" style={{ background: "#111008", border: "1px solid rgba(106,154,224,0.2)", borderRadius: 4, color: "#9a8a6a", fontFamily: "'Cinzel', serif", cursor: "pointer" }}>
                 Later
               </button>
               <button onClick={startWizardSignatureSpell} className="px-4 py-2 text-sm font-semibold" style={{ background: "linear-gradient(135deg, #101a2b, #1b2e45)", border: "1px solid rgba(106,154,224,0.4)", borderRadius: 4, color: "#6a9ae0", fontFamily: "'Cinzel', serif", cursor: "pointer" }}>
-                Begin
+                Open Menu
               </button>
             </div>
           </div>
