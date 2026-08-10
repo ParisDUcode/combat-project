@@ -3470,15 +3470,6 @@ export default function App() {
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-sm font-bold" style={{ fontFamily: "'Cinzel', serif", color: "#e2cfa0" }}>Spells</span>
                     <div className="flex items-center gap-1">
-                      {levelNumber >= 5 && (
-                        <button
-                          onClick={() => setWizardSignatureSpellPromptOpen(true)}
-                          className="px-2 py-0.5 text-[8px] uppercase tracking-widest transition-all hover:opacity-90"
-                          style={{ background: "rgba(106,154,224,0.12)", border: "1px solid rgba(106,154,224,0.3)", borderRadius: 3, color: "#6a9ae0", fontFamily: "'Cinzel', serif", cursor: "pointer", fontSize: 9 }}
-                        >
-                          + Signature
-                        </button>
-                      )}
                       <button
                         onClick={() => { setImportJsonText(""); setImportJsonOpen(true); }}
                         className="px-2 py-0.5 text-[8px] uppercase tracking-widest transition-all hover:opacity-90"
