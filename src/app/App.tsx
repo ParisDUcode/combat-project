@@ -2395,9 +2395,9 @@ export default function App() {
   const baseSpeed = selectedClass === "Fighter" ? 3 : selectedClass === "Wizard" ? 2 : 0;
   const speed = baseSpeed + equippedItems.reduce((sum, item) => sum + (item.speedBonus ?? 0), 0);
   const displaySpeed = fighterDashActive ? speed * 2 : speed;
+  const levelNumber = level === "" ? 1 : Number(level);
   const wizardCounterspellMaxCharges = selectedClass === "Wizard" && levelNumber >= 7 ? Math.floor((levelNumber - 7) / 2) + 1 : 0;
   const initiative = effectiveStats.PHYS;
-  const levelNumber = level === "" ? 1 : Number(level);
   const fighterActionCount = selectedClass === "Fighter"
     ? Math.max(1, 1 + Math.floor(levelNumber / 5))
     : selectedClass === "Wizard"
