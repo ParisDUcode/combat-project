@@ -23,7 +23,11 @@ export type PassiveTrigger =
   | "on_attack_hit"
   | "on_damaged"
   | "on_threshold"
-  | "on_defeated";
+  | "on_defeated"
+  | "attack"
+  | "hit"
+  | "death"
+  | "damage_taken";
 
 export interface MonsterEffect {
   type: "damage" | "heal_self" | "resource_gain" | "note";
@@ -46,7 +50,7 @@ export interface ActiveAbility {
   id: string;
   name: string;
   description?: string;
-  target: "player" | "self" | "none";
+  target: "player" | "self" | "ally" | "none";
   formula?: RollFormula;
   damageType?: DamageType;
   effects?: MonsterEffect[];
@@ -208,7 +212,7 @@ const normalizeAbility = (ability: unknown): ActiveAbility | null => {
     id,
     name: String(value.name ?? "Active Ability"),
     description: value.description ? String(value.description) : undefined,
-    target: value.target === "self" || value.target === "none" ? value.target : "player",
+    target: value.target === "self" || value.target === "ally" || value.target === "none" ? value.target : "player",
     formula: value.formula ? normalizeFormula(value.formula) : undefined,
     damageType,
     effects: normalizeEffects(value.effects),
@@ -227,6 +231,7 @@ const normalizePassive = (passive: unknown): PassiveAbility | null => {
   if (!passive || typeof passive !== "object") return null;
   const value = passive as Partial<PassiveAbility>;
   const id = value.id ? String(value.id) : String(value.name ?? "passive").toLowerCase().replace(/\s+/g, "-");
+  const rawTrigger = String(value.trigger ?? "").trim().toLowerCase();
   const trigger: PassiveTrigger = [
     "encounter_start",
     "turn_start",
@@ -234,8 +239,18 @@ const normalizePassive = (passive: unknown): PassiveAbility | null => {
     "on_damaged",
     "on_threshold",
     "on_defeated",
-  ].includes(value.trigger ?? "")
-    ? (value.trigger as PassiveTrigger)
+    "attack",
+    "hit",
+    "death",
+    "damage_taken",
+  ].includes(rawTrigger)
+    ? ((rawTrigger === "attack" || rawTrigger === "hit"
+        ? "on_attack_hit"
+        : rawTrigger === "death"
+          ? "on_defeated"
+          : rawTrigger === "damage_taken"
+            ? "on_damaged"
+            : rawTrigger) as PassiveTrigger)
     : "turn_start";
 
   return {
