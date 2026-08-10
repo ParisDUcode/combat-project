@@ -290,7 +290,31 @@ type MonsterTier = "Easy" | "Medium" | "Hard" | "Deadly";
 
 const MONSTER_TIER_ORDER: MonsterTier[] = ["Easy", "Medium", "Hard", "Deadly"];
 
+const parseCrValue = (cr: unknown): number | null => {
+  if (typeof cr === "number") return Number.isFinite(cr) ? cr : null;
+  if (typeof cr !== "string") return null;
+  const normalized = cr.trim();
+  if (!normalized) return null;
+  if (normalized.includes("/")) {
+    const [numRaw, denRaw] = normalized.split("/");
+    const num = Number(numRaw);
+    const den = Number(denRaw);
+    if (!Number.isFinite(num) || !Number.isFinite(den) || den === 0) return null;
+    return num / den;
+  }
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
 const getMonsterTier = (monster: MonsterDef): MonsterTier => {
+  const crValue = parseCrValue(monster.cr);
+  if (crValue !== null) {
+    if (crValue < 2) return "Easy";
+    if (crValue < 3) return "Medium";
+    if (crValue < 4) return "Hard";
+    return "Deadly";
+  }
+
   const power = monsterPower(monster);
   if (power <= 20) return "Easy";
   if (power <= 40) return "Medium";
