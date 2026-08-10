@@ -3434,14 +3434,6 @@ export default function App() {
                       </button>
                     </div>
                   </div>
-                  {levelNumber >= 5 && (
-                    <div className="mb-2 rounded px-2 py-1.5" style={{ background: "rgba(106,154,224,0.08)", border: "1px solid rgba(106,154,224,0.18)" }}>
-                      <div className="text-[10px] font-semibold uppercase tracking-[0.2em]" style={{ color: "#6a9ae0", fontFamily: "'Cinzel', serif" }}>Signature Spell</div>
-                      <p className="mt-0.5 text-[10px]" style={{ color: "#9a8a6a", fontFamily: "'Crimson Pro', serif" }}>
-                        At level 5 you can begin a personal spell that grows and evolves as your story expands.
-                      </p>
-                    </div>
-                  )}
                   <div className="flex flex-col gap-2">
                     {spells.length === 0 && (
                       <p className="text-[10px] italic" style={{ color: "#3a3020", fontFamily: "'Crimson Pro', serif" }}>No spells yet.</p>
