@@ -3,7 +3,44 @@ import { normalizeMonsterCollection, normalizeMonsterDefinition } from "./types"
 import { akkiDemon } from "./definitions/akkiDemon";
 import { animatedArmor } from "./definitions/animatedArmor";
 import { animatronic } from "./definitions/animatronic";
-import { banditCutthroat, boar, caveBear, frostHound, gloomBat, iceSprite, leechSwarm, magmin, manaLeech, muckLurker, needleBlight, orderInitiate, skeletonWarrior, smugglerDeckhand, snowGolem, viper } from "./definitions/extraMonsters";
+import {
+  absoluteArcanist,
+  alphaWolf,
+  banditCutthroat,
+  banditEnforcer,
+  bloodRaptor,
+  boar,
+  caveBear,
+  caveViper,
+  direBoar,
+  frostDrakeWhelp,
+  frostHound,
+  glassSentry,
+  gloomBat,
+  harpyScreamer,
+  highwayCaptain,
+  iceSprite,
+  leechSwarm,
+  lesserMinotaur,
+  lightningElemental,
+  magmin,
+  manaLeech,
+  muckLurker,
+  needleBlight,
+  orderInitiate,
+  rokuganVeteran,
+  rogueMarksman,
+  shadowAssassin,
+  shadowBladeAssassin,
+  shadowPanther,
+  skeletonWarrior,
+  smugglerDeckhand,
+  snowGolem,
+  stoneGolem,
+  swampTroll,
+  viper,
+  wightKnight,
+} from "./definitions/extraMonsters";
 import { flyingFireSpitter } from "./definitions/flyingFireSpitter";
 import { lowTierGoon } from "./definitions/lowTierGoon";
 import { wolf } from "./definitions/wolf";
@@ -33,6 +70,26 @@ const RAW_MONSTERS: MonsterDefinition[] = [
   magmin,
   needleBlight,
   skeletonWarrior,
+  shadowPanther,
+  bloodRaptor,
+  caveViper,
+  rogueMarksman,
+  absoluteArcanist,
+  shadowBladeAssassin,
+  lightningElemental,
+  glassSentry,
+  direBoar,
+  alphaWolf,
+  banditEnforcer,
+  rokuganVeteran,
+  wightKnight,
+  lesserMinotaur,
+  swampTroll,
+  harpyScreamer,
+  stoneGolem,
+  frostDrakeWhelp,
+  shadowAssassin,
+  highwayCaptain,
 ];
 
 export const BASE_MONSTER_REGISTRY = normalizeMonsterCollection(RAW_MONSTERS);

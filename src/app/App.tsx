@@ -276,6 +276,18 @@ function difficultyLabel(power: number): { label: string; color: string } {
   return { label: "Deadly", color: "#8b1c1c" };
 }
 
+type MonsterTier = "Easy" | "Medium" | "Hard" | "Deadly";
+
+const MONSTER_TIER_ORDER: MonsterTier[] = ["Easy", "Medium", "Hard", "Deadly"];
+
+const getMonsterTier = (monster: MonsterDef): MonsterTier => {
+  const power = monsterPower(monster);
+  if (power <= 20) return "Easy";
+  if (power <= 40) return "Medium";
+  if (power <= 70) return "Hard";
+  return "Deadly";
+};
+
 function rollD(sides: number) {
   return Math.floor(Math.random() * sides) + 1;
 }
@@ -465,7 +477,11 @@ export default function App() {
 
   // ─── Class abilities ──────────────────────────────────────────────────────
   const [secondWindUses, setSecondWindUses] = useState(2);
+  const [fighterDashActive, setFighterDashActive] = useState(false);
+  const [fighterDashUsedThisTurn, setFighterDashUsedThisTurn] = useState(false);
   const [wizardSpellSlots, setWizardSpellSlots] = useState(2);
+  const [wizardSignatureSpellPromptOpen, setWizardSignatureSpellPromptOpen] = useState(false);
+  const [wizardSignatureSpellAcknowledged, setWizardSignatureSpellAcknowledged] = useState(false);
 
   const [damageInput, setDamageInput] = useState("");
   const [healInput, setHealInput] = useState("");
@@ -565,7 +581,11 @@ export default function App() {
       adminOpen,
       // class ability counters + miscellaneous
       secondWindUses,
+      fighterDashActive,
+      fighterDashUsedThisTurn,
       wizardSpellSlots,
+      wizardSignatureSpellPromptOpen,
+      wizardSignatureSpellAcknowledged,
       damageInput,
       healInput,
       damageType,
@@ -771,6 +791,11 @@ export default function App() {
     if (d.statPopup !== undefined) setStatPopup(d.statPopup);
     if (d.adminOpen !== undefined) setAdminOpen(d.adminOpen);
     if (d.secondWindUses !== undefined) setSecondWindUses(d.secondWindUses);
+    if (d.fighterDashActive !== undefined) setFighterDashActive(Boolean(d.fighterDashActive));
+    if (d.fighterDashUsedThisTurn !== undefined) setFighterDashUsedThisTurn(Boolean(d.fighterDashUsedThisTurn));
+    if (d.wizardSpellSlots !== undefined) setWizardSpellSlots(d.wizardSpellSlots);
+    if (d.wizardSignatureSpellPromptOpen !== undefined) setWizardSignatureSpellPromptOpen(Boolean(d.wizardSignatureSpellPromptOpen));
+    if (d.wizardSignatureSpellAcknowledged !== undefined) setWizardSignatureSpellAcknowledged(Boolean(d.wizardSignatureSpellAcknowledged));
     if (d.damageInput !== undefined) setDamageInput(d.damageInput);
     if (d.healInput !== undefined) setHealInput(d.healInput);
     if (d.damageType !== undefined) setDamageType(d.damageType);
@@ -1734,6 +1759,17 @@ export default function App() {
 
   const combatTotalPower = fightCombatants.reduce((s, m) => s + monsterPower(m), 0);
   const diff = difficultyLabel(combatTotalPower);
+  const rosterTierMeta: Record<MonsterTier, { label: string; color: string }> = {
+    Easy: { label: "Easy", color: "#6aaa6a" },
+    Medium: { label: "Medium", color: "#c4853a" },
+    Hard: { label: "Hard", color: "#e05050" },
+    Deadly: { label: "Deadly", color: "#8b1c1c" },
+  };
+  const groupedMonsterRoster = MONSTER_TIER_ORDER.map((tier) => ({
+    tier,
+    ...rosterTierMeta[tier],
+    monsters: BASE_MONSTER_REGISTRY.filter((monster) => getMonsterTier(monster) === tier),
+  }));
 
   const logCombat = (msg: string) => setCombatLog((p) => [msg, ...p].slice(0, 60));
 
@@ -1817,6 +1853,40 @@ export default function App() {
     addLog(`Second Wind — healed ${heal} HP (PHYS ${effectiveStats.PHYS})`, "heal");
   };
 
+  const useFighterDash = () => {
+    if (fighterDashUsedThisTurn || levelNumber < 5 || selectedClass !== "Fighter") return;
+
+    const nextIndex = actionUsedSlots.findIndex((used) => !used);
+    if (nextIndex === -1) return;
+
+    setActionUsedSlots((prev) => prev.map((used, index) => (index === nextIndex ? true : used)));
+    setFighterDashActive(true);
+    setFighterDashUsedThisTurn(true);
+    addLog("Combat Dash — your movement doubles for this turn.", "info");
+  };
+
+  const startWizardSignatureSpell = () => {
+    setWizardSignatureSpellAcknowledged(true);
+    setWizardSignatureSpellPromptOpen(false);
+
+    const signatureSpell: Spell = {
+      id: nextSpellId,
+      name: "Signature Spell Draft",
+      type: "Ability",
+      description: "A personal spell that grows and evolves with your legend.",
+      isSpell: true,
+      slotCost: 1,
+      slotCostMax: 3,
+      scaleDamageBySlots: true,
+      damageDie: 6,
+      damageStat: "INT",
+    };
+
+    setSpells((prev) => [...prev, signatureSpell]);
+    setNextSpellId((prev) => prev + 1);
+    addLog("Signature Spell — your first draft is ready to evolve over time.", "info");
+  };
+
   const doLongRestRoll = () => {
     const roll = rollD(20);
     const total = roll + effectiveStats.INT;
@@ -1831,6 +1901,8 @@ export default function App() {
     const secondWindCharges = 2 + Math.floor(lvl / 5);
     setCurrentHp(max);
     setSecondWindUses(secondWindCharges);
+    setFighterDashActive(false);
+    setFighterDashUsedThisTurn(false);
     setWizardSpellSlots(Math.max(1, lvl + 1));
     addLog("Long rest completed — HP fully restored, abilities refreshed.", "heal");
     // restore weapon charges
@@ -2237,6 +2309,7 @@ export default function App() {
   const ac = physAC; // keep ac alias for attack applyDamage
   const baseSpeed = selectedClass === "Fighter" ? 3 : selectedClass === "Wizard" ? 2 : 0;
   const speed = baseSpeed + equippedItems.reduce((sum, item) => sum + (item.speedBonus ?? 0), 0);
+  const displaySpeed = fighterDashActive ? speed * 2 : speed;
   const initiative = effectiveStats.PHYS;
   const levelNumber = level === "" ? 1 : Number(level);
   const fighterActionCount = selectedClass === "Fighter"
@@ -2257,6 +2330,20 @@ export default function App() {
     if (selectedClass !== "Fighter") return;
     setSecondWindUses(secondWindMaxUses);
   }, [selectedClass, secondWindMaxUses]);
+
+  useEffect(() => {
+    if (selectedClass !== "Fighter") {
+      setFighterDashActive(false);
+      setFighterDashUsedThisTurn(false);
+    }
+  }, [selectedClass]);
+
+  useEffect(() => {
+    if (selectedClass !== "Wizard" || levelNumber < 5) return;
+    if (!wizardSignatureSpellAcknowledged) {
+      setWizardSignatureSpellPromptOpen(true);
+    }
+  }, [selectedClass, levelNumber, wizardSignatureSpellAcknowledged]);
 
   // ─── Derived ─────────────────────────────────────────────────────────────
   const hpNum = typeof currentHp === "number" ? currentHp : 0;
@@ -2617,7 +2704,7 @@ export default function App() {
                     val: magicResist,
                   },
                   { key: "Initiative", icon: <Zap size={13} style={{ color: "#9a8a6a" }} />, val: initiative },
-                  { key: "Speed",      icon: <Footprints size={14} style={{ color: "#9a8a6a" }} />, val: speed },
+                  { key: "Speed",      icon: <Footprints size={14} style={{ color: "#9a8a6a" }} />, val: displaySpeed },
                 ] as { key: string; icon: React.ReactNode; val: number }[]).map(({ key, icon, val }) => {
                   const active = statPopup === key;
                   return (
@@ -3147,6 +3234,37 @@ export default function App() {
                       </div>
                     </button>
                   </div>
+                  {levelNumber >= 5 && (
+                    <div style={{ background: "#111008", border: "1px solid rgba(196,133,58,0.18)", borderRadius: 5, padding: "10px 12px" }}>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-sm font-bold" style={{ fontFamily: "'Cinzel', serif", color: "#e2cfa0" }}>Combat Dash</span>
+                        <span className="text-[10px] uppercase tracking-[0.2em]" style={{ color: fighterDashActive ? "#6aaa6a" : "#3a3020", fontFamily: "'Cinzel', serif" }}>
+                          {fighterDashActive ? "Active" : "Level 5"}
+                        </span>
+                      </div>
+                      <p className="text-xs mb-2" style={{ color: "#9a8a6a", fontFamily: "'Crimson Pro', serif" }}>
+                        Spend an action to double your movement for the current turn. The effect ends at the next turn reset.
+                      </p>
+                      <button
+                        onClick={useFighterDash}
+                        disabled={fighterDashUsedThisTurn || actionUsedSlots.every(Boolean)}
+                        className="w-full py-1.5 text-xs font-semibold transition-all hover:opacity-90 active:scale-95"
+                        style={{
+                          background: fighterDashUsedThisTurn || actionUsedSlots.every(Boolean) ? "rgba(255,255,255,0.03)" : "rgba(196,133,58,0.15)",
+                          border: `1px solid ${fighterDashUsedThisTurn || actionUsedSlots.every(Boolean) ? "rgba(255,255,255,0.06)" : "rgba(196,133,58,0.4)"}`,
+                          borderRadius: 4,
+                          color: fighterDashUsedThisTurn || actionUsedSlots.every(Boolean) ? "#3a3020" : "#c4853a",
+                          fontFamily: "'Cinzel', serif",
+                          cursor: fighterDashUsedThisTurn || actionUsedSlots.every(Boolean) ? "default" : "pointer",
+                        }}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span>{fighterDashUsedThisTurn ? "Used this turn" : "Use Dash"}</span>
+                          <ActionCostBadge cost="action" />
+                        </div>
+                      </button>
+                    </div>
+                  )}
                 </div>
               ) : selectedClass === "Wizard" ? null : selectedClass ? (
                 <p className="text-xs italic" style={{ color: "#3a3020", fontFamily: "'Crimson Pro', serif" }}>
@@ -3225,14 +3343,33 @@ export default function App() {
                 <div className="mt-3" style={{ background: "#111008", border: "1px solid rgba(106,154,224,0.2)", borderRadius: 5, padding: "10px 12px" }}>
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-sm font-bold" style={{ fontFamily: "'Cinzel', serif", color: "#e2cfa0" }}>Spells</span>
-                    <button
-                      onClick={() => { setImportJsonText(""); setImportJsonOpen(true); }}
-                      className="px-2 py-0.5 text-[8px] uppercase tracking-widest transition-all hover:opacity-90"
-                      style={{ background: "rgba(106,154,224,0.12)", border: "1px solid rgba(106,154,224,0.3)", borderRadius: 3, color: "#6a9ae0", fontFamily: "'Cinzel', serif", cursor: "pointer", fontSize: 9 }}
-                    >
-                      + Import
-                    </button>
+                    <div className="flex items-center gap-1">
+                      {levelNumber >= 5 && (
+                        <button
+                          onClick={() => setWizardSignatureSpellPromptOpen(true)}
+                          className="px-2 py-0.5 text-[8px] uppercase tracking-widest transition-all hover:opacity-90"
+                          style={{ background: "rgba(106,154,224,0.12)", border: "1px solid rgba(106,154,224,0.3)", borderRadius: 3, color: "#6a9ae0", fontFamily: "'Cinzel', serif", cursor: "pointer", fontSize: 9 }}
+                        >
+                          + Signature
+                        </button>
+                      )}
+                      <button
+                        onClick={() => { setImportJsonText(""); setImportJsonOpen(true); }}
+                        className="px-2 py-0.5 text-[8px] uppercase tracking-widest transition-all hover:opacity-90"
+                        style={{ background: "rgba(106,154,224,0.12)", border: "1px solid rgba(106,154,224,0.3)", borderRadius: 3, color: "#6a9ae0", fontFamily: "'Cinzel', serif", cursor: "pointer", fontSize: 9 }}
+                      >
+                        + Import
+                      </button>
+                    </div>
                   </div>
+                  {levelNumber >= 5 && (
+                    <div className="mb-2 rounded px-2 py-1.5" style={{ background: "rgba(106,154,224,0.08)", border: "1px solid rgba(106,154,224,0.18)" }}>
+                      <div className="text-[10px] font-semibold uppercase tracking-[0.2em]" style={{ color: "#6a9ae0", fontFamily: "'Cinzel', serif" }}>Signature Spell</div>
+                      <p className="mt-0.5 text-[10px]" style={{ color: "#9a8a6a", fontFamily: "'Crimson Pro', serif" }}>
+                        At level 5 you can begin a personal spell that grows and evolves as your story expands.
+                      </p>
+                    </div>
+                  )}
                   <div className="flex flex-col gap-2">
                     {spells.length === 0 && (
                       <p className="text-[10px] italic" style={{ color: "#3a3020", fontFamily: "'Crimson Pro', serif" }}>No spells yet.</p>
@@ -3351,7 +3488,7 @@ export default function App() {
               </div>
 
               <button
-                onClick={() => { setActionUsedSlots(Array.from({ length: fighterActionCount }, () => false)); setBonusActionUsed(false); }}
+                onClick={() => { setActionUsedSlots(Array.from({ length: fighterActionCount }, () => false)); setBonusActionUsed(false); setFighterDashActive(false); setFighterDashUsedThisTurn(false); }}
                 className="w-full py-1.5 text-xs hover:opacity-80 transition-opacity"
                 style={{ background: "rgba(196,133,58,0.08)", border: "1px solid rgba(196,133,58,0.2)", borderRadius: 4, color: "#9a8a6a", fontFamily: "'Cinzel', serif", cursor: "pointer" }}
               >
@@ -4013,18 +4150,36 @@ export default function App() {
                 <div className="text-xs italic mb-4" style={{ color: "#3a3020", fontFamily: "'Crimson Pro', serif" }}>No players configured</div>
 
                 <div className="text-xs uppercase tracking-widest mb-3" style={{ color: "#9a8a6a", fontFamily: "'Cinzel', serif" }}>Monsters</div>
-                <div className="flex flex-col gap-1.5">
-                  {BASE_MONSTER_REGISTRY.map((m) => (
-                    <div
-                      key={m.id}
-                      draggable
-                      onDragStart={() => startFightDrag(m.id, "roster")}
-                      className="flex items-center justify-between px-3 py-2 cursor-grab hover:opacity-80 transition-opacity"
-                      style={{ background: "#111008", border: "1px solid rgba(196,133,58,0.15)", borderRadius: 4 }}
-                    >
-                      <div>
-                        <div className="text-sm" style={{ fontFamily: "'Cinzel', serif", color: "#e2cfa0" }}>{m.name}</div>
-                        <div className="text-xs" style={{ color: "#9a8a6a", fontFamily: "'JetBrains Mono', monospace" }}>CR {m.cr} · HP {m.hp}</div>
+                <div className="flex flex-col gap-3">
+                  {groupedMonsterRoster.map((group) => (
+                    <div key={group.tier}>
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-[10px] uppercase tracking-[0.2em]" style={{ color: group.color, fontFamily: "'Cinzel', serif" }}>
+                          {group.label}
+                        </span>
+                        <span className="text-[10px]" style={{ color: "#6a5a3a", fontFamily: "'JetBrains Mono', monospace" }}>
+                          {group.monsters.length}
+                        </span>
+                      </div>
+                      <div className="flex flex-col gap-1.5">
+                        {group.monsters.length === 0 ? (
+                          <div className="px-2 py-1 text-[10px] italic" style={{ color: "#3a3020", fontFamily: "'Crimson Pro', serif" }}>
+                            No monsters yet
+                          </div>
+                        ) : group.monsters.map((m) => (
+                          <div
+                            key={m.id}
+                            draggable
+                            onDragStart={() => startFightDrag(m.id, "roster")}
+                            className="flex items-center justify-between px-3 py-2 cursor-grab hover:opacity-80 transition-opacity"
+                            style={{ background: "#111008", border: "1px solid rgba(196,133,58,0.15)", borderRadius: 4 }}
+                          >
+                            <div>
+                              <div className="text-sm" style={{ fontFamily: "'Cinzel', serif", color: "#e2cfa0" }}>{m.name}</div>
+                              <div className="text-xs" style={{ color: "#9a8a6a", fontFamily: "'JetBrains Mono', monospace" }}>Power {monsterPower(m)} · HP {m.hp}</div>
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     </div>
                   ))}
@@ -4751,6 +4906,25 @@ export default function App() {
               </button>
               <button onClick={importItemsFromText} className="px-4 py-2 text-sm font-semibold" style={{ background: "linear-gradient(135deg, #1a1208, #241a0c)", border: "1px solid rgba(196,133,58,0.4)", borderRadius: 4, color: "#c4853a", fontFamily: "'Cinzel', serif", cursor: "pointer" }}>
                 Import
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {wizardSignatureSpellPromptOpen && (
+        <div className="fixed inset-0 flex items-center justify-center z-60" style={{ background: "rgba(0,0,0,0.78)" }} onClick={() => { setWizardSignatureSpellPromptOpen(false); setWizardSignatureSpellAcknowledged(true); }}>
+          <div className="p-6 flex flex-col gap-4 w-full max-w-md" style={{ background: "#0e0c08", border: "1px solid rgba(106,154,224,0.4)", borderRadius: 8 }} onClick={(e) => e.stopPropagation()}>
+            <div className="text-base font-bold" style={{ fontFamily: "'Cinzel', serif", color: "#6a9ae0" }}>Signature Spell</div>
+            <div className="text-sm" style={{ color: "#9a8a6a", fontFamily: "'Crimson Pro', serif" }}>
+              At level 5, your wizard can begin a personal spell that grows and evolves over time. Shape its identity, add new effects as your legend deepens, and let the spell become the signature of your character.
+            </div>
+            <div className="flex justify-end gap-2">
+              <button onClick={() => { setWizardSignatureSpellPromptOpen(false); setWizardSignatureSpellAcknowledged(true); }} className="px-4 py-2 text-sm" style={{ background: "#111008", border: "1px solid rgba(106,154,224,0.2)", borderRadius: 4, color: "#9a8a6a", fontFamily: "'Cinzel', serif", cursor: "pointer" }}>
+                Later
+              </button>
+              <button onClick={startWizardSignatureSpell} className="px-4 py-2 text-sm font-semibold" style={{ background: "linear-gradient(135deg, #101a2b, #1b2e45)", border: "1px solid rgba(106,154,224,0.4)", borderRadius: 4, color: "#6a9ae0", fontFamily: "'Cinzel', serif", cursor: "pointer" }}>
+                Begin
               </button>
             </div>
           </div>
