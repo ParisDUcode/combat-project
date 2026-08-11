@@ -2814,7 +2814,7 @@ export default function App() {
                   {
                     key: "physAC",
                     icon: <Shield size={15} style={{ color: "#c4853a" }} />,
-                    val: physAC,
+                    val: ac,
                   },
                   {
                     key: "magicResist",
