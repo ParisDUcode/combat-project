@@ -2223,6 +2223,7 @@ export default function App() {
       "- spells accepts spell-like entries with isSpell: true and optional spell-specific fields.\n" +
       "- For abilities, support tallyFormula, modifiers, and actions just like the existing ability importer.\n" +
       "- Ability modifiers can target regular stats (PHYS, CON, INT, SOC, plus common aliases like STR, DEX, WIS, CHA, SOCIAL) and derived traits (AC/Armor, MR/Magic Resist, Speed).\n" +
+      "- Feat and ability modifiers for AC, MR, and Speed now affect the character's actual derived combat values used by the sheet and damage mitigation logic.\n" +
       "- For spells, support damageDie, damageStat, statModifiers, slotCost, slotCostMax, and scaleDamageBySlots.\n" +
       "- A spell can use just damageDie if you want a die-only effect with no extra stat bonus; damageStat is optional.\n" +
       "\nBehavior implemented by the app:\n" +
