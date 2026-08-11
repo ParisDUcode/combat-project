@@ -2248,7 +2248,12 @@ export default function App() {
           type: "Feat",
           description: "Describe what this ability does.",
           tallyFormula: "floor(level/2)",
-          modifiers: [{ label: "CON", value: "floor(level/4)" }],
+          modifiers: [
+            { label: "CON", value: "floor(level/4)" },
+            { label: "AC", value: "1" },
+            { label: "Magic Resist", value: "2" },
+            { label: "Speed", value: "1" },
+          ],
           actions: [
             { name: "Precision Burst", formula: "1d8 + PHYS + INT", consumesTally: true, description: "A focused strike that blends steel and spellwork." },
           ],
