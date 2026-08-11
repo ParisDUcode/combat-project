@@ -17,6 +17,7 @@ import type {
   RollableAttack,
 } from "./monsters/types";
 import { normalizeMonsterCollection } from "./monsters/types";
+import { resolveAbilityModifierTarget } from "./abilityModifierTargets";
 
 type StatKey = "PHYS" | "CON" | "INT" | "SOC";
 type ClassName = "Fighter" | "Wizard";
@@ -1023,13 +1024,27 @@ export default function App() {
   };
   const abilityScoreModifiers = abilities.reduce((acc, ability) => {
     ability.modifiers?.forEach((mod) => {
-      const stat = canonicalStatKey(mod.label);
-      if (stat) {
-        acc[stat] += parseModifierValue(mod.value);
+      const target = resolveAbilityModifierTarget(mod.label);
+      if (
+        target?.kind === "stat"
+        && (target.target === "PHYS" || target.target === "CON" || target.target === "INT" || target.target === "SOC")
+      ) {
+        acc[target.target] += parseModifierValue(mod.value);
       }
     });
     return acc;
   }, { ...EMPTY_STATS } as Stats);
+  const abilityDerivedModifiers = abilities.reduce((acc, ability) => {
+    ability.modifiers?.forEach((mod) => {
+      const target = resolveAbilityModifierTarget(mod.label);
+      if (target?.kind !== "derived") return;
+      const value = parseModifierValue(mod.value);
+      if (target.target === "AC") acc.ac += value;
+      if (target.target === "MR") acc.mr += value;
+      if (target.target === "SPEED") acc.speed += value;
+    });
+    return acc;
+  }, { ac: 0, mr: 0, speed: 0 });
   const equipmentScoreBonuses = Array.from(
     new Map(
       (Object.values(equipment).filter(Boolean) as InventoryItem[]).map((item) => [item.id, item]),
@@ -2210,6 +2225,7 @@ export default function App() {
       "- abilities accepts Scars, Feats, and Abilities with type (Feat|Scar|Ability).\n" +
       "- spells accepts spell-like entries with isSpell: true and optional spell-specific fields.\n" +
       "- For abilities, support tallyFormula, modifiers, and actions just like the existing ability importer.\n" +
+      "- Ability modifiers can target regular stats (PHYS, CON, INT, SOC, plus common aliases like STR, DEX, WIS, CHA, SOCIAL) and derived traits (AC/Armor, MR/Magic Resist, Speed).\n" +
       "- For spells, support damageDie, damageStat, statModifiers, slotCost, slotCostMax, and scaleDamageBySlots.\n" +
       "- A spell can use just damageDie if you want a die-only effect with no extra stat bonus; damageStat is optional.\n" +
       "\nBehavior implemented by the app:\n" +
@@ -2402,10 +2418,10 @@ export default function App() {
     ).values(),
   );
   const physAC = equippedItems.reduce((sum, item) => sum + (item.acBonus ?? 0), 0);
-  const magicResist = equippedItems.reduce((sum, item) => sum + (item.magicResistBonus ?? 0), 0);
-  const ac = physAC; // keep ac alias for attack applyDamage
+  const magicResist = equippedItems.reduce((sum, item) => sum + (item.magicResistBonus ?? 0), 0) + abilityDerivedModifiers.mr;
+  const ac = physAC + abilityDerivedModifiers.ac; // keep ac alias for attack applyDamage
   const baseSpeed = selectedClass === "Fighter" ? 3 : selectedClass === "Wizard" ? 2 : 0;
-  const speed = baseSpeed + equippedItems.reduce((sum, item) => sum + (item.speedBonus ?? 0), 0);
+  const speed = baseSpeed + equippedItems.reduce((sum, item) => sum + (item.speedBonus ?? 0), 0) + abilityDerivedModifiers.speed;
   const displaySpeed = fighterDashActive ? speed * 2 : speed;
   const levelNumber = level === "" ? 1 : Number(level);
   const wizardCounterspellMaxCharges = selectedClass === "Wizard" && levelNumber >= 7 ? Math.floor((levelNumber - 7) / 2) + 1 : 0;
