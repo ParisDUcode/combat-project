@@ -601,6 +601,18 @@ export default function App() {
   const [currentJournalIndex, setCurrentJournalIndex] = useState(0);
   const [nextJournalEntryId, setNextJournalEntryId] = useState(2);
 
+  useEffect(() => {
+    const trimmedName = characterName.trim();
+
+    if (combatActive) {
+      document.title = "Combat Tracker";
+    } else if (trimmedName) {
+      document.title = trimmedName;
+    } else {
+      document.title = "Hunter's Palette";
+    }
+  }, [characterName, combatActive]);
+
   // ─── Save / Load ─────────────────────────────────────────────────────────
   const saveCharacter = async () => {
     // gather a comprehensive snapshot of character state
