@@ -17,7 +17,7 @@ import type {
   RollableAttack,
 } from "./monsters/types";
 import { normalizeMonsterCollection } from "./monsters/types";
-import { resolveAbilityModifierTarget } from "./abilityModifierTargets";
+import { collectAbilityDerivedModifierTotals, resolveAbilityModifierTarget } from "./abilityModifierTargets";
 
 type StatKey = "PHYS" | "CON" | "INT" | "SOC";
 type ClassName = "Fighter" | "Wizard";
@@ -1005,7 +1005,7 @@ export default function App() {
       }
     } catch (e) {}
 
-    const resistance = type === "physical" ? physAC : magicResist;
+    const resistance = type === "physical" ? ac : magicResist;
     const typeLabel = type === "physical" ? "Physical" : "Magic";
     const afterResistance = Math.max(0, raw - resistance);
     const resistanceLabel = resistance > 0 ? ` − ${resistance} ${typeLabel === "Physical" ? "AC" : "MR"} = ${afterResistance}` : "";
@@ -1035,15 +1035,12 @@ export default function App() {
     return acc;
   }, { ...EMPTY_STATS } as Stats);
   const abilityDerivedModifiers = abilities.reduce((acc, ability) => {
-    ability.modifiers?.forEach((mod) => {
-      const target = resolveAbilityModifierTarget(mod.label);
-      if (target?.kind !== "derived") return;
-      const value = parseModifierValue(mod.value);
-      if (target.target === "AC") acc.ac += value;
-      if (target.target === "MR") acc.mr += value;
-      if (target.target === "SPEED") acc.speed += value;
-    });
-    return acc;
+    const derived = collectAbilityDerivedModifierTotals(ability.modifiers, parseModifierValue);
+    return {
+      ac: acc.ac + derived.ac,
+      mr: acc.mr + derived.mr,
+      speed: acc.speed + derived.speed,
+    };
   }, { ac: 0, mr: 0, speed: 0 });
   const equipmentScoreBonuses = Array.from(
     new Map(

@@ -5,6 +5,17 @@ export interface AbilityModifierTarget {
   target: 'PHYS' | 'CON' | 'INT' | 'SOC' | 'AC' | 'MR' | 'SPEED';
 }
 
+export interface AbilityModifierLike {
+  label: string;
+  value: string;
+}
+
+export interface AbilityDerivedModifierTotals {
+  ac: number;
+  mr: number;
+  speed: number;
+}
+
 const STAT_ALIASES: Record<string, 'PHYS' | 'CON' | 'INT' | 'SOC'> = {
   PHYS: 'PHYS',
   STR: 'PHYS',
@@ -41,4 +52,21 @@ export const resolveAbilityModifierTarget = (value: unknown): AbilityModifierTar
   if (derivedTarget) return { kind: 'derived', target: derivedTarget };
 
   return null;
+};
+
+export const collectAbilityDerivedModifierTotals = (
+  modifiers: AbilityModifierLike[] | undefined,
+  parseModifierValue: (value: string) => number,
+): AbilityDerivedModifierTotals => {
+  return (modifiers ?? []).reduce<AbilityDerivedModifierTotals>((acc, mod) => {
+    const target = resolveAbilityModifierTarget(mod.label);
+    if (target?.kind !== 'derived') return acc;
+
+    const value = parseModifierValue(mod.value);
+    if (target.target === 'AC') acc.ac += value;
+    if (target.target === 'MR') acc.mr += value;
+    if (target.target === 'SPEED') acc.speed += value;
+
+    return acc;
+  }, { ac: 0, mr: 0, speed: 0 });
 };
