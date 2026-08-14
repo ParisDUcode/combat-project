@@ -409,6 +409,13 @@ const normalizeStatExpression = (value: unknown): string | undefined => {
   return mapped.join("+");
 };
 
+const isSpellLikeEntry = (entry: any): boolean => Boolean(entry?.isSpell)
+  || entry?.damageDie !== undefined
+  || entry?.damageStat !== undefined
+  || entry?.slotCost !== undefined
+  || entry?.slotCostMax !== undefined
+  || entry?.scaleDamageBySlots !== undefined;
+
 // Safely evaluate a formula string with level + stat variables
 function evaluateFormula(formula: string, lvl: number, s: Stats): number {
   try {
@@ -2294,17 +2301,21 @@ export default function App() {
       const abilityEntries = Array.isArray(payload?.abilities)
         ? payload.abilities
         : Array.isArray(payload)
-          ? payload.filter((entry: any) => !entry?.isSpell && !(entry?.damageDie !== undefined || entry?.damageStat !== undefined || entry?.slotCost !== undefined || entry?.slotCostMax !== undefined || entry?.scaleDamageBySlots !== undefined))
+          ? payload.filter((entry: any) => !isSpellLikeEntry(entry))
           : Array.isArray(payload?.template?.abilities)
             ? payload.template.abilities
-            : [payload];
+            : isSpellLikeEntry(payload)
+              ? []
+              : [payload];
       const spellEntries = Array.isArray(payload?.spells)
         ? payload.spells
         : Array.isArray(payload)
-          ? payload.filter((entry: any) => Boolean(entry?.isSpell) || entry?.damageDie !== undefined || entry?.damageStat !== undefined || entry?.slotCost !== undefined || entry?.slotCostMax !== undefined || entry?.scaleDamageBySlots !== undefined)
+          ? payload.filter((entry: any) => isSpellLikeEntry(entry))
           : Array.isArray(payload?.template?.spells)
             ? payload.template.spells
-            : [];
+            : isSpellLikeEntry(payload)
+              ? [payload]
+              : [];
 
       const importedAbilities: Ability[] = abilityEntries.map((a: any, i: number) => ({
         id: nextAbilityId + i,
@@ -3504,7 +3515,7 @@ export default function App() {
                     <span className="text-sm font-bold" style={{ fontFamily: "'Cinzel', serif", color: "#e2cfa0" }}>Spells</span>
                     <div className="flex items-center gap-1">
                       <button
-                        onClick={() => { setImportJsonText(""); setImportJsonOpen(true); }}
+                        onClick={() => { setImportSpellJsonText(""); setImportSpellJsonOpen(true); }}
                         className="px-2 py-0.5 text-[8px] uppercase tracking-widest transition-all hover:opacity-90"
                         style={{ background: "rgba(106,154,224,0.12)", border: "1px solid rgba(106,154,224,0.3)", borderRadius: 3, color: "#6a9ae0", fontFamily: "'Cinzel', serif", cursor: "pointer", fontSize: 9 }}
                       >
@@ -3974,11 +3985,11 @@ export default function App() {
               </button>
             </div>
             <div className="flex flex-col gap-3">
-              {abilities.filter((ability) => ability.type === "Feat" || ability.type === "Scar" || ability.type === "Ability").length === 0 && (
+              {abilities.filter((ability) => !(ability as any).isSpell && (ability.type === "Feat" || ability.type === "Scar" || ability.type === "Ability")).length === 0 && (
                 <p className="text-xs italic" style={{ color: "#3a3020", fontFamily: "'Crimson Pro', serif" }}>None yet.</p>
               )}
               {abilities
-                .filter((ability) => ability.type === "Feat" || ability.type === "Scar" || ability.type === "Ability")
+                .filter((ability) => !(ability as any).isSpell && (ability.type === "Feat" || ability.type === "Scar" || ability.type === "Ability"))
                 .map((ability) => (
                   <div key={ability.id} style={{ background: "#111008", border: `1px solid ${ABILITY_TYPE_COLORS[ability.type]}22`, borderRadius: 5, overflow: "hidden" }}>
                     <div className="flex items-center justify-between px-3 pt-3 pb-1">
