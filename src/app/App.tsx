@@ -251,6 +251,7 @@ type MonsterAttack = RollableAttack;
 interface CombatMonster {
   uid: string;
   def: MonsterDef;
+  displayName: string;
   side: "ally" | "enemy";
   currentHp: number;
   initiative: number;
@@ -1832,17 +1833,21 @@ export default function App() {
   };
 
   const startCombat = () => {
-    const allies: CombatMonster[] = fightAllies.map(({ def }) => ({
+    const namedAllies = withDuplicateFightNames(fightAllies);
+    const namedEnemies = withDuplicateFightNames(fightCombatants);
+    const allies: CombatMonster[] = namedAllies.map(({ def, displayName }) => ({
       uid: `${def.id}-${Math.random().toString(36).slice(2)}`,
       def,
+      displayName,
       side: "ally",
       currentHp: def.hp,
       initiative: rollD(20) + def.stats.PHYS,
       runtime: buildMonsterRuntime(def),
     }));
-    const enemies: CombatMonster[] = fightCombatants.map(({ def }) => ({
+    const enemies: CombatMonster[] = namedEnemies.map(({ def, displayName }) => ({
       uid: `${def.id}-${Math.random().toString(36).slice(2)}`,
       def,
+      displayName,
       side: "enemy",
       currentHp: def.hp,
       initiative: rollD(20) + def.stats.PHYS,
@@ -1861,9 +1866,9 @@ export default function App() {
       prev.map((monster) => {
         const passive = resolvePassiveTrigger(monster.def, monster.runtime, "encounter_start");
         if (passive.healing > 0) {
-          logCombat(`${monster.def.name} gains ${passive.healing} HP from encounter passives.`);
+          logCombat(`${monster.displayName} gains ${passive.healing} HP from encounter passives.`);
         }
-        passive.logLines.forEach((line) => logCombat(line));
+        passive.logLines.forEach((line) => logCombat(relabelLog(monster, line)));
         return {
           ...monster,
           currentHp: Math.min(monster.def.hp, monster.currentHp + passive.healing),
@@ -1895,11 +1900,15 @@ export default function App() {
 
   const logCombat = (msg: string) => setCombatLog((p) => [msg, ...p].slice(0, 60));
 
+  // Engine log text is generated from def.name; swap in the fight's a/b/c display name.
+  const relabelLog = (monster: CombatMonster, text: string) =>
+    monster.displayName === monster.def.name ? text : text.split(monster.def.name).join(monster.displayName);
+
   const monsterAttackPlayer = (monster: CombatMonster, attack: MonsterAttack, player: CombatPlayer) => {
     const resolved = resolveMonsterAttack(monster.def, monster.runtime, attack);
     const raw = resolved.damage;
-    logCombat(`${resolved.logLine} → ${player.name}`);
-    resolved.effectLines.forEach((line) => logCombat(line));
+    logCombat(`${relabelLog(monster, resolved.logLine)} → ${player.name}`);
+    resolved.effectLines.forEach((line) => logCombat(relabelLog(monster, line)));
     setCombatMonsters((prev) =>
       prev.map((entry) => (entry.uid === monster.uid ? { ...entry, runtime: resolved.runtime } : entry)),
     );
@@ -1914,9 +1923,9 @@ export default function App() {
         if (monster.uid !== monsterUid) return monster;
         const cooled = tickMonsterCooldowns(monster.runtime);
         const passive = resolvePassiveTrigger(monster.def, cooled, "turn_start");
-        passive.logLines.forEach((line) => logCombat(line));
+        passive.logLines.forEach((line) => logCombat(relabelLog(monster, line)));
         if (passive.healing > 0) {
-          logCombat(`${monster.def.name} restores ${passive.healing} HP from passives.`);
+          logCombat(`${monster.displayName} restores ${passive.healing} HP from passives.`);
         }
         return {
           ...monster,
@@ -1929,8 +1938,8 @@ export default function App() {
 
   const useMonsterAbility = (monster: CombatMonster, ability: ActiveAbility) => {
     const resolved = resolveActiveAbility(monster.def, monster.runtime, ability);
-    logCombat(resolved.logLine);
-    resolved.effectLines.forEach((line) => logCombat(line));
+    logCombat(relabelLog(monster, resolved.logLine));
+    resolved.effectLines.forEach((line) => logCombat(relabelLog(monster, line)));
 
     if (!resolved.canUse) return;
 
@@ -4490,7 +4499,7 @@ export default function App() {
                     >
                       {cm.side === "enemy" ? "Enemy" : "Ally"}
                     </span>
-                    <span className="text-sm" style={{ fontFamily: "'Cinzel', serif", color: "#e2cfa0" }}>{cm.def.name}</span>
+                    <span className="text-sm" style={{ fontFamily: "'Cinzel', serif", color: "#e2cfa0" }}>{cm.displayName}</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="text-xs" style={{ color: "#9a8a6a", fontFamily: "'Cinzel', serif" }}>d20+PHYS</span>
@@ -4535,7 +4544,7 @@ export default function App() {
       {/* ── COMBAT VIEW ───────────────────────────────────────────────────── */}
       {combatActive && (() => {
         const allEntries = [
-          ...combatMonsters.map((m) => ({ kind: "monster" as const, uid: m.uid, name: m.def.name, initiative: m.initiative, side: m.side, data: m })),
+          ...combatMonsters.map((m) => ({ kind: "monster" as const, uid: m.uid, name: m.displayName, initiative: m.initiative, side: m.side, data: m })),
           ...combatPlayers.map((p) => ({ kind: "player" as const, uid: p.uid, name: p.name, initiative: p.initiative, data: p })),
         ].sort((a, b) => b.initiative - a.initiative);
 
@@ -4678,7 +4687,7 @@ export default function App() {
                       {/* Name + meta */}
                       <div className="flex items-start justify-between gap-1">
                         <div className="flex flex-col gap-0.5">
-                          <span className="text-sm font-bold leading-tight" style={{ fontFamily: "'Cinzel', serif", color: "#e2cfa0" }}>{cm.def.name}</span>
+                          <span className="text-sm font-bold leading-tight" style={{ fontFamily: "'Cinzel', serif", color: "#e2cfa0" }}>{cm.displayName}</span>
                           <span
                             className="text-[9px] px-1.5 py-0.5 rounded w-fit"
                             style={{
@@ -4726,8 +4735,8 @@ export default function App() {
                             onClick={() => {
                               if (!isActiveTurn) return;
                               const resolved = resolveMonsterAttack(cm.def, cm.runtime, atk);
-                              logCombat(resolved.logLine);
-                              resolved.effectLines.forEach((line) => logCombat(line));
+                              logCombat(relabelLog(cm, resolved.logLine));
+                              resolved.effectLines.forEach((line) => logCombat(relabelLog(cm, line)));
                               setCombatMonsters((prev) =>
                                 prev.map((monster) => (monster.uid === cm.uid ? { ...monster, runtime: resolved.runtime } : monster)),
                               );
