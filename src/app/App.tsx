@@ -547,6 +547,8 @@ export default function App() {
   const [hidePrompt, setHidePrompt] = useState<{ kind: "slot" | "weapon-attack" | "ability"; key: string; label: string } | null>(null);
   const longPressTimerRef = useRef<number | null>(null);
   const suppressNextClickRef = useRef(false);
+  const [copyToast, setCopyToast] = useState<string | null>(null);
+  const copyToastTimerRef = useRef<number | null>(null);
 
   // ─── Class abilities ──────────────────────────────────────────────────────
   const [secondWindUses, setSecondWindUses] = useState(2);
@@ -1667,6 +1669,33 @@ export default function App() {
       setHiddenWeaponAttackEntries((prev) => ({ ...prev, [hidePrompt.key]: true }));
     }
     setHidePrompt(null);
+  };
+
+  const copyJsonToClipboard = async (data: unknown, label: string) => {
+    const text = JSON.stringify(data, null, 2);
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      const t = document.createElement("textarea");
+      t.value = text;
+      document.body.appendChild(t);
+      t.select();
+      document.execCommand("copy");
+      document.body.removeChild(t);
+    }
+    if (copyToastTimerRef.current !== null) window.clearTimeout(copyToastTimerRef.current);
+    setCopyToast(`Copied ${label}`);
+    copyToastTimerRef.current = window.setTimeout(() => setCopyToast(null), 1600);
+  };
+
+  const copyAbilityJson = (ability: Ability) => {
+    const { id, hidden, ...rest } = ability;
+    copyJsonToClipboard(rest, ability.name || "Feat");
+  };
+
+  const copyItemJson = (item: InventoryItem) => {
+    const { id, ...rest } = item;
+    copyJsonToClipboard(rest, item.name || "Item");
   };
 
   const clearHiddenDisplayForItem = (itemId: number) => {
@@ -4000,7 +4029,15 @@ export default function App() {
               {abilities
                 .filter((ability) => !(ability as any).isSpell && (ability.type === "Feat" || ability.type === "Scar" || ability.type === "Ability"))
                 .map((ability) => (
-                  <div key={ability.id} style={{ background: "#111008", border: `1px solid ${ABILITY_TYPE_COLORS[ability.type]}22`, borderRadius: 5, overflow: "hidden" }}>
+                  <div key={ability.id} style={{ background: "#111008", border: `1px solid ${ABILITY_TYPE_COLORS[ability.type]}22`, borderRadius: 5, overflow: "hidden" }}
+                    onMouseDown={beginLongPress(() => copyAbilityJson(ability))}
+                    onMouseUp={cancelLongPress}
+                    onMouseLeave={cancelLongPress}
+                    onTouchStart={beginLongPress(() => copyAbilityJson(ability))}
+                    onTouchEnd={cancelLongPress}
+                    onTouchCancel={cancelLongPress}
+                    onClickCapture={handleCardClickCapture}
+                  >
                     <div className="flex items-center justify-between px-3 pt-3 pb-1">
                       <span className="text-sm font-bold" style={{ fontFamily: "'Cinzel', serif", color: "#e2cfa0" }}>{ability.name}</span>
                       <div className="flex items-center gap-2">
@@ -4151,7 +4188,15 @@ export default function App() {
                   const maxCharges = normalizedWeapon.maxCharges;
                   const charges = normalizedWeapon.currentCharges ?? maxCharges ?? 0;
                   return (
-                    <div key={normalizedWeapon.id} style={{ background: "#111008", border: "1px solid rgba(196,133,58,0.18)", borderRadius: 5, overflow: "hidden" }}>
+                    <div key={normalizedWeapon.id} style={{ background: "#111008", border: "1px solid rgba(196,133,58,0.18)", borderRadius: 5, overflow: "hidden" }}
+                      onMouseDown={beginLongPress(() => copyItemJson(normalizedWeapon))}
+                      onMouseUp={cancelLongPress}
+                      onMouseLeave={cancelLongPress}
+                      onTouchStart={beginLongPress(() => copyItemJson(normalizedWeapon))}
+                      onTouchEnd={cancelLongPress}
+                      onTouchCancel={cancelLongPress}
+                      onClickCapture={handleCardClickCapture}
+                    >
                       <div className="flex items-center justify-between px-3 pt-2.5 pb-1">
                         <span className="text-sm font-bold" style={{ fontFamily: "'Cinzel', serif", color: "#e2cfa0" }}>{normalizedWeapon.name}</span>
                         <div className="flex items-center gap-2">
@@ -5154,6 +5199,15 @@ export default function App() {
         <div style={{ position: "fixed", top: 24, left: "50%", transform: "translateX(-50%)", zIndex: 60 }}>
           <div style={{ background: "#163716", border: "1px solid rgba(106,170,106,0.25)", color: "#cfeecd", padding: "10px 14px", borderRadius: 6, boxShadow: "0 4px 12px rgba(0,0,0,0.6)", fontFamily: "'JetBrains Mono', monospace" }}>
             {dodgePopup}
+          </div>
+        </div>
+      )}
+
+      {/* Copy JSON toast */}
+      {copyToast && (
+        <div style={{ position: "fixed", top: 24, left: "50%", transform: "translateX(-50%)", zIndex: 70 }}>
+          <div style={{ background: "#1a1208", border: "1px solid rgba(196,133,58,0.4)", color: "#e2cfa0", padding: "10px 14px", borderRadius: 6, boxShadow: "0 4px 12px rgba(0,0,0,0.6)", fontFamily: "'Cinzel', serif", fontSize: 13 }}>
+            {copyToast}
           </div>
         </div>
       )}
