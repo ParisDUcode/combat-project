@@ -2005,12 +2005,13 @@ export default function App() {
 
   const useSecondWind = () => {
     if (secondWindUses <= 0) return;
-    const heal = effectiveStats.PHYS;
+    const roll = rollD(4);
+    const heal = roll + effectiveStats.PHYS;
     const cur = typeof currentHp === "number" ? currentHp : 0;
     const max = typeof maxHp === "number" ? maxHp : 0;
     setCurrentHp(Math.min(max, cur + heal));
     setSecondWindUses((u) => u - 1);
-    addLog(`Second Wind — healed ${heal} HP (PHYS ${effectiveStats.PHYS})`, "heal");
+    addLog(`Second Wind — rolled 1d4 (${roll}) + PHYS ${effectiveStats.PHYS} = ${heal} HP healed.`, "heal");
   };
 
   const useFighterDash = () => {
@@ -3385,7 +3386,7 @@ export default function App() {
                       </div>
                     </div>
                     <p className="text-xs mb-2" style={{ color: "#9a8a6a", fontFamily: "'Crimson Pro', serif" }}>
-                      Heal PHYS ({effectiveStats.PHYS} HP). {secondWindMaxUses} uses per long rest.
+                      Heal 1d4 + PHYS ({effectiveStats.PHYS} base). {secondWindMaxUses} uses per long rest.
                     </p>
                     <button
                       onClick={useSecondWind}
