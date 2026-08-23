@@ -1465,10 +1465,7 @@ export default function App() {
         : `${roll} + ${action.stat}(${sv})`;
     }
 
-    if (!detail) {
-      addLog(`${ability.name} — ${action.name} has no valid roll formula.`, "info");
-      return;
-    }
+    const hasRollResult = Boolean(detail);
 
     if (action.consumesTally) {
       setAbilities((prev) => prev.map((entry) => {
@@ -1487,7 +1484,14 @@ export default function App() {
       }));
     }
 
-    applyDamage(total, `✦ ${ability.name} — ${action.name} (${detail})`);
+    if (hasRollResult) {
+      applyDamage(total, `✦ ${ability.name} — ${action.name} (${detail})`);
+    } else {
+      addLog(
+        `✦ ${ability.name} — ${action.name}${action.description ? `: ${action.description}` : ""}`,
+        "info",
+      );
+    }
   };
 
 
@@ -3065,6 +3069,77 @@ export default function App() {
                     </div>
                   </div>
                 ))}
+
+                {abilities
+                  .filter((ability) => !isPassiveAbility(ability) && !ability.hidden)
+                  .map((ability) => {
+                    const abilityTotal = ability.tallyFormula
+                      ? Math.max(1, evaluateFormula(ability.tallyFormula, levelNumber, effectiveStats))
+                      : (ability.tally?.total ?? 1);
+                    const abilityUsed = ability.tally?.used ?? 0;
+                    const abilityRemaining = Math.max(0, abilityTotal - abilityUsed);
+
+                    return (
+                      <div
+                        key={`active-ability-${ability.id}`}
+                        className="w-full py-3 px-4"
+                        style={{ background: "linear-gradient(135deg, #14100a, #1e1608)", border: "1px solid rgba(196,133,58,0.3)", borderRadius: 5 }}
+                        onMouseDown={beginLongPress(() => setHidePrompt({ kind: "ability", key: String(ability.id), label: ability.name }))}
+                        onMouseUp={cancelLongPress}
+                        onMouseLeave={cancelLongPress}
+                        onTouchStart={beginLongPress(() => setHidePrompt({ kind: "ability", key: String(ability.id), label: ability.name }))}
+                        onTouchEnd={cancelLongPress}
+                        onTouchCancel={cancelLongPress}
+                        onClickCapture={handleCardClickCapture}
+                      >
+                        <div className="flex items-center justify-between gap-2 mb-1">
+                          <div className="text-sm font-bold" style={{ fontFamily: "'Cinzel', serif", color: "#e2cfa0" }}>
+                            {ability.name}
+                          </div>
+                          {ability.tallyFormula || ability.tally ? (
+                            <span className="text-[10px]" style={{ color: "#c4853a", fontFamily: "'JetBrains Mono', monospace" }}>
+                              {abilityRemaining}/{abilityTotal}
+                            </span>
+                          ) : null}
+                        </div>
+                        <div className="text-xs mb-2" style={{ color: "#9a8a6a", fontFamily: "'Crimson Pro', serif" }}>
+                          {ability.description}
+                        </div>
+                        <div className="flex flex-col gap-1">
+                          {ability.actions?.map((action, actionIdx) => {
+                            const disabled = Boolean(action.consumesTally) && abilityRemaining <= 0;
+                            return (
+                              <button
+                                key={`${ability.id}-active-action-${actionIdx}`}
+                                onClick={() => doAbilityAction(ability, actionIdx)}
+                                disabled={disabled}
+                                className="w-full py-2 px-3 text-left transition-all hover:opacity-90 active:scale-95"
+                                style={{
+                                  background: disabled ? "rgba(255,255,255,0.03)" : "rgba(196,133,58,0.1)",
+                                  border: `1px solid ${disabled ? "rgba(255,255,255,0.08)" : "rgba(196,133,58,0.35)"}`,
+                                  borderRadius: 4,
+                                  color: disabled ? "#5a5040" : "#e2cfa0",
+                                  cursor: disabled ? "default" : "pointer",
+                                }}
+                              >
+                                <div className="flex items-center justify-between gap-2">
+                                  <span className="text-xs font-semibold" style={{ fontFamily: "'Cinzel', serif" }}>
+                                    {action.name}{action.consumesTally ? " ♦" : ""}
+                                  </span>
+                                  <ActionCostBadge cost="action" />
+                                </div>
+                                {action.description ? (
+                                  <div className="text-xs leading-snug mt-1" style={{ color: "#8a7a5a", fontFamily: "'Crimson Pro', serif" }}>
+                                    {action.description}
+                                  </div>
+                                ) : null}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
 
                 {(Object.entries(equipment) as [EquipSlot, InventoryItem | null][])
                   .filter(([, wpn]) => Boolean(wpn && wpn.type === "weapon"))
