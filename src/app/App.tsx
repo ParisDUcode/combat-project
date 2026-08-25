@@ -1075,7 +1075,8 @@ export default function App() {
     if (!selectedClass) return;
     const hitDie = CLASS_HIT_DIE[selectedClass];
     const lvl = level === "" ? 1 : Number(level);
-    const defaultHp = hitDie + Math.max(0, lvl - 1) * (hitDie / 4);
+    const classHpBonus = selectedClass === "Fighter" ? lvl : 0;
+    const defaultHp = hitDie + Math.max(0, lvl - 1) * (hitDie / 4) + classHpBonus;
     const conHp = lvl * effectiveStats.CON;
     const computed = Math.max(1, Math.round(defaultHp + conHp));
     setMaxHp(computed);
