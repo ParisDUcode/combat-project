@@ -201,6 +201,10 @@ const usesWeaponLogic = (item: InventoryItem | null | undefined) => Boolean(item
   || item.healStat !== undefined
 ));
 
+// Lets descriptions flag an action as a bonus action without a dedicated data field.
+const getActionCost = (description?: string): "action" | "bonus" =>
+  description?.toLowerCase().includes("bonus action") ? "bonus" : "action";
+
 const ActionCostBadge = ({ cost }: { cost: "action" | "bonus" }) => (
   <span
     className="text-[10px] uppercase tracking-[0.2em]"
@@ -3127,7 +3131,7 @@ export default function App() {
                                   <span className="text-xs font-semibold" style={{ fontFamily: "'Cinzel', serif" }}>
                                     {action.name}{action.consumesTally ? " ♦" : ""}
                                   </span>
-                                  <ActionCostBadge cost="action" />
+                                  <ActionCostBadge cost={getActionCost(action.description)} />
                                 </div>
                                 {action.description ? (
                                   <div className="text-xs leading-snug mt-1" style={{ color: "#8a7a5a", fontFamily: "'Crimson Pro', serif" }}>
@@ -3318,7 +3322,7 @@ export default function App() {
                                   <span className="text-xs font-semibold" style={{ fontFamily: "'Cinzel', serif", color: "#e2cfa0" }}>
                                     {atk.name}{atk.consumesCharge ? " ⚡" : ""}
                                   </span>
-                                  <ActionCostBadge cost="action" />
+                                  <ActionCostBadge cost={getActionCost(atk.description)} />
                                 </div>
                                 <div className="text-[10px] mt-0.5" style={{ color: "#9a8a6a", fontFamily: "'JetBrains Mono', monospace" }}>
                                   {atk.formula
@@ -3353,7 +3357,7 @@ export default function App() {
                         style={{ background: "transparent", border: "none", padding: 0, cursor: "pointer" }}>
                         <div className="flex items-center justify-between gap-2 mb-1">
                           <div className="text-sm font-bold" style={{ fontFamily: "'Cinzel', serif", color: "#e2cfa0" }}>{normalizedWeapon.name}</div>
-                          <ActionCostBadge cost="action" />
+                          <ActionCostBadge cost={getActionCost(normalizedWeapon.description)} />
                         </div>
                         <div className="text-xs" style={{ color: "#9a8a6a", fontFamily: "'JetBrains Mono', monospace" }}>
                           {normalizedWeapon.weaponFormula
@@ -4521,7 +4525,12 @@ export default function App() {
                       style={{ background: "#111a10", border: "1px solid rgba(106,170,106,0.25)", borderRadius: 4 }}>
                       <div>
                         <div className="text-sm" style={{ fontFamily: "'Cinzel', serif", color: "#e2cfa0" }}>{entry.displayName}</div>
-                        <div className="text-xs" style={{ color: "#9a8a6a", fontFamily: "'JetBrains Mono', monospace" }}>HP {m.hp} · AC {m.ac}</div>
+                        <div className="flex items-center gap-1 text-xs" style={{ color: "#9a8a6a", fontFamily: "'JetBrains Mono', monospace" }}>
+                          <span>HP {m.hp}</span>
+                          <span>·</span>
+                          <Shield size={11} style={{ color: "#c4853a" }} />
+                          <span>{m.ac}</span>
+                        </div>
                       </div>
                       <button onClick={() => removeFromFightColumn(entry.uid, "allies")} style={{ background: "none", border: "none", cursor: "pointer", color: "#6a3a3a" }}><X size={11} /></button>
                     </div>
@@ -4554,7 +4563,13 @@ export default function App() {
                         style={{ background: "#1a1008", border: "1px solid rgba(139,28,28,0.3)", borderRadius: 4 }}>
                         <div>
                           <div className="text-sm" style={{ fontFamily: "'Cinzel', serif", color: "#e2cfa0" }}>{entry.displayName}</div>
-                          <div className="text-xs" style={{ color: "#9a8a6a", fontFamily: "'JetBrains Mono', monospace" }}>HP {m.hp} · AC {m.ac} · Power {pw}</div>
+                          <div className="flex items-center gap-1 text-xs" style={{ color: "#9a8a6a", fontFamily: "'JetBrains Mono', monospace" }}>
+                            <span>HP {m.hp}</span>
+                            <span>·</span>
+                            <Shield size={11} style={{ color: "#c4853a" }} />
+                            <span>{m.ac}</span>
+                            <span>· Power {pw}</span>
+                          </div>
                         </div>
                         <button onClick={() => removeFromFightColumn(entry.uid, "combatants")} style={{ background: "none", border: "none", cursor: "pointer", color: "#6a3a3a" }}><X size={11} /></button>
                       </div>
@@ -4823,7 +4838,19 @@ export default function App() {
                         </div>
                         <span className="text-xs shrink-0 ml-1" style={{ fontFamily: "'JetBrains Mono', monospace", color: "#c4853a" }}>{cm.initiative}</span>
                       </div>
-                      <div className="text-xs" style={{ color: "#9a8a6a", fontFamily: "'JetBrains Mono', monospace" }}>CR {cm.def.cr} · AC {cm.def.ac} · MR {cm.def.mr} · Spd {cm.def.speed}</div>
+                      <div className="flex items-center gap-1 text-xs" style={{ color: "#9a8a6a", fontFamily: "'JetBrains Mono', monospace" }}>
+                        <span>CR {cm.def.cr}</span>
+                        <span>·</span>
+                        <Shield size={11} style={{ color: "#c4853a" }} />
+                        <span>{cm.def.ac}</span>
+                        <span>·</span>
+                        <svg width="11" height="11" viewBox="0 0 15 15" fill="none">
+                          <circle cx="7.5" cy="7.5" r="6.5" stroke="#9a8acc" strokeWidth="1.5"/>
+                          <circle cx="7.5" cy="7.5" r="2" fill="#9a8acc"/>
+                        </svg>
+                        <span>{cm.def.mr}</span>
+                        <span>· Spd {cm.def.speed}</span>
+                      </div>
                       {/* HP bar */}
                       <div className="relative h-3 rounded-sm overflow-hidden" style={{ background: "#1a1510" }}>
                         <div className="h-full transition-all duration-300" style={{ width: `${hpPct}%`, background: hpCol }} />
