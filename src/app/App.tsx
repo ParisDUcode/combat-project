@@ -184,6 +184,9 @@ const hasWeaponAttackProfile = (item: InventoryItem | null | undefined): boolean
   || (typeof item.weaponFormula === "string" && item.weaponFormula.trim())
   || (item.die !== undefined && item.stat !== undefined)
 ));
+const hasChargeConsumingAttack = (item: InventoryItem | null | undefined): boolean => Boolean(
+  item?.attacks?.some((attack) => attack.consumesCharge),
+);
 const usesWeaponLogic = (item: InventoryItem | null | undefined) => Boolean(item && (
   item.type === "weapon"
   || item.die !== undefined
@@ -3288,7 +3291,7 @@ export default function App() {
                               </div>
                             )}
                           </div>
-                        ) : (
+                        ) : hasChargeConsumingAttack(normalizedWeapon) ? (
                           <div className="mb-2">
                             <button
                               onClick={() => enableItemCharges(normalizedWeapon.id)}
@@ -3298,7 +3301,7 @@ export default function App() {
                               Enable charges
                             </button>
                           </div>
-                        )}
+                        ) : null}
                         <div className="flex flex-col gap-1">
                           {normalizedWeapon.attacks.map((atk, atkIdx) => {
                             const sv = atk.stat ? resolveStatValue(atk.stat) : 0;
@@ -3432,14 +3435,14 @@ export default function App() {
                             </div>
                           )}
                         </div>
-                      ) : (
+                      ) : hasChargeConsumingAttack(normalizedWeapon) ? (
                         <div className="mt-2">
                           <button onClick={() => enableItemCharges(normalizedWeapon.id)} className="px-2 py-0.5 text-[10px]"
                             style={{ background: "#171208", border: "1px solid rgba(196,133,58,0.35)", borderRadius: 4, color: "#9a8a6a", fontFamily: "'JetBrains Mono', monospace", cursor: "pointer" }}>
                             Enable charges
                           </button>
                         </div>
-                      )}
+                      ) : null}
                       <div className="absolute bottom-0 left-0 right-0 h-0.5 opacity-0 group-hover:opacity-100 transition-opacity" style={{ background: "#c4853a" }} />
                     </div>
                   );
@@ -4390,14 +4393,14 @@ export default function App() {
                             ) : null}
                           </div>
                         </div>
-                      ) : (
+                      ) : hasChargeConsumingAttack(normalizedWeapon) ? (
                         <div className="px-3 pb-3">
                           <button onClick={() => enableItemCharges(normalizedWeapon.id)} className="px-2 py-0.5 text-[10px]"
                             style={{ background: "#171208", border: "1px solid rgba(196,133,58,0.35)", borderRadius: 4, color: "#9a8a6a", fontFamily: "'JetBrains Mono', monospace", cursor: "pointer" }}>
                             Enable charges
                           </button>
                         </div>
-                      )}
+                      ) : null}
                     </div>
                   );
                 })}
