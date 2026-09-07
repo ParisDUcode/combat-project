@@ -238,7 +238,7 @@ const SECONDARY_DESCRIPTIONS: Record<string, string> = {
   magicResist: "Magic Resist — mitigates magical damage 1 to 1. Each point absorbs one point of incoming magic damage before it reaches your HP.",
   Initiative:  "Initiative — equals your PHYS score. Determines who acts first when combat begins.",
   Speed:       "Speed — base movement. Fighter starts at 3, Wizard starts at 2, then increases from boots and other gear. Used by the DM to determine range.",
-  Omnivamp:    "Omnivamp — heals you for that % of any damage you deal (rounded up). Granted by weapons and abilities.",
+  Omnivamp:    "Omnivamp — heals you for that % of ALL damage you deal (rounded up). Total from your equipped items and abilities.",
 };
 
 const EQUIP_SLOTS: { key: EquipSlot; label: string; accepts: ItemType[] }[] = [
@@ -1365,9 +1365,9 @@ export default function App() {
     }
   };
 
-  // Heals the attacker for a % of damage dealt (always rounds up).
-  const applyOmnivamp = (damageDealt: number, sourceLabel: string, itemPct = 0) => {
-    const pct = abilityDerivedModifiers.omnivamp + itemPct;
+  // Heals the attacker for a % of damage dealt (always rounds up). Uses the character-wide omnivamp pool.
+  const applyOmnivamp = (damageDealt: number, sourceLabel: string) => {
+    const pct = omnivamp;
     if (damageDealt <= 0 || pct <= 0) return;
     const heal = Math.ceil((damageDealt * pct) / 100);
     adjustHp(heal);
@@ -1396,7 +1396,7 @@ export default function App() {
         const outcome = evaluateWeaponFormula(formula, effectiveStats);
         if (outcome.ok) {
           applyDamage(outcome.total, `⚔ ${chargedItem.name} — ${atk.name} (${outcome.detail})`);
-          applyOmnivamp(outcome.total, `⚔ ${chargedItem.name} — ${atk.name}`, chargedItem.omnivamp ?? 0);
+          applyOmnivamp(outcome.total, `⚔ ${chargedItem.name} — ${atk.name}`);
           return;
         }
       }
@@ -1414,7 +1414,7 @@ export default function App() {
         ? `${roll} + ${atk.stat}(${sv}) + ${bonus}`
         : `${roll} + ${atk.stat}(${sv})`;
       applyDamage(total, `⚔ ${chargedItem.name} — ${atk.name} (${detail})`);
-      applyOmnivamp(total, `⚔ ${chargedItem.name} — ${atk.name}`, chargedItem.omnivamp ?? 0);
+      applyOmnivamp(total, `⚔ ${chargedItem.name} — ${atk.name}`);
       return;
     }
 
@@ -1431,7 +1431,7 @@ export default function App() {
       const outcome = evaluateWeaponFormula(formula, effectiveStats);
       if (outcome.ok) {
         applyDamage(outcome.total, `⚔ ${chargedItem.name} (${outcome.detail})`);
-        applyOmnivamp(outcome.total, `⚔ ${chargedItem.name}`, chargedItem.omnivamp ?? 0);
+        applyOmnivamp(outcome.total, `⚔ ${chargedItem.name}`);
         applyWeaponHealing(chargedItem);
         return;
       }
@@ -1461,7 +1461,7 @@ export default function App() {
     }
 
     applyDamage(total, `⚔ ${chargedItem.name} (${detailParts.join(" + ")})`);
-    applyOmnivamp(total, `⚔ ${chargedItem.name}`, chargedItem.omnivamp ?? 0);
+    applyOmnivamp(total, `⚔ ${chargedItem.name}`);
     applyWeaponHealing(chargedItem);
   };
 
@@ -2188,7 +2188,7 @@ export default function App() {
       "- Formula field: weaponFormula (string)\n" +
       "- If weaponFormula is present, it overrides legacy damage fields for damage calc.\n" +
       "- heal (number), healDie (number), healStat (PHYS|CON|INT|SOC) are supported in this mode.\n" +
-      "- omnivamp (number) heals for a % of damage dealt with this weapon, rounded up. Applies in both modes.\n" +
+      "- omnivamp (number) on any equipped item adds to your character-wide omnivamp %, healing you for that % of ALL damage you deal, rounded up.\n" +
       "\nMULTI-ATTACK DAMAGE MODE (attacks array present):\n" +
       "- attacks: [{ name, die?, stat?, formula?, damageBonus?, consumesCharge?, description? }]\n" +
       "- Each attack must include either formula OR (die and stat).\n" +
@@ -2324,7 +2324,7 @@ export default function App() {
       "- spells accepts spell-like entries with isSpell: true and optional spell-specific fields.\n" +
       "- For abilities, support tallyFormula, modifiers, and actions just like the existing ability importer.\n" +
       "- Ability modifiers can target regular stats (PHYS, CON, INT, SOC, plus common aliases like STR, DEX, WIS, CHA, SOCIAL) and derived traits (AC/Armor, MR/Magic Resist, Speed, Omnivamp %).\n" +
-      "- Feat and ability modifiers for AC, MR, Speed, and Omnivamp now affect the character's actual derived combat values used by the sheet and damage mitigation logic. Omnivamp heals for that % of damage dealt (rounded up).\n" +
+      "- Feat and ability modifiers for AC, MR, Speed, and Omnivamp now affect the character's actual derived combat values used by the sheet and damage mitigation logic. Omnivamp is character-wide and heals for that % of ALL damage dealt (rounded up).\n" +
       "- For spells, support damageDie, damageStat, statModifiers, slotCost, slotCostMax, and scaleDamageBySlots.\n" +
       "- A spell can use just damageDie if you want a die-only effect with no extra stat bonus; damageStat is optional.\n" +
       "\nBehavior implemented by the app:\n" +
@@ -2532,8 +2532,22 @@ export default function App() {
   const baseSpeed = selectedClass === "Fighter" ? 3 : selectedClass === "Wizard" ? 2 : 0;
   const speed = baseSpeed + equippedItems.reduce((sum, item) => sum + (item.speedBonus ?? 0), 0) + abilityDerivedModifiers.speed;
   const displaySpeed = fighterDashActive ? speed * 2 : speed;
-  const omnivamp = abilityDerivedModifiers.omnivamp;
+  // Character-wide omnivamp: abilities + every equipped item's omnivamp field.
+  const omnivamp = abilityDerivedModifiers.omnivamp + equippedItems.reduce((sum, item) => sum + (item.omnivamp ?? 0), 0);
   const levelNumber = level === "" ? 1 : Number(level);
+
+  // Red vampire-fangs badge for omnivamp; shown as a passive stat badge while omnivamp is active.
+  const OmnivampBadge = () => (
+    <span className="inline-flex items-center gap-1 align-middle px-1.5 py-0.5 rounded" title={`Omnivamp ${omnivamp}% — heals you for ${omnivamp}% of ALL damage dealt (rounded up)`}
+      style={{ background: "rgba(224,80,80,0.08)", border: "1px solid rgba(224,80,80,0.35)" }}>
+      <svg width="11" height="11" viewBox="0 0 12 12" fill="none">
+        <path d="M1 2 L4 2 L4 6.5 L3 10 L2 6.5 Z" fill="#e05050"/>
+        <path d="M8 2 L11 2 L10 6.5 L9 10 L8 6.5 Z" fill="#e05050"/>
+        <path d="M1 2 Q6 4.5 11 2" stroke="#e05050" strokeWidth="1.2" fill="none"/>
+      </svg>
+      <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 10, fontWeight: 700, color: "#e05050" }}>{omnivamp}%</span>
+    </span>
+  );
   const wizardCounterspellMaxCharges = selectedClass === "Wizard" && levelNumber >= 7 ? Math.floor((levelNumber - 7) / 2) + 1 : 0;
   const initiative = effectiveStats.PHYS;
   const fighterActionCount = selectedClass === "Fighter"
@@ -3093,6 +3107,7 @@ export default function App() {
             <div style={panelStyle}>
               <div className="text-xs uppercase tracking-widest mb-4 flex items-center gap-2" style={{ color: "#9a8a6a", fontFamily: "'Cinzel', serif" }}>
                 <Sword size={12} style={{ color: "#c4853a" }} /> Attacks and Equipment Abilities
+                {omnivamp > 0 ? <OmnivampBadge /> : null}
               </div>
               <div className="flex flex-col gap-2">
                 <button onClick={doBasicAttack} className="group relative w-full py-4 px-6 text-left transition-all hover:opacity-90 active:scale-95"
