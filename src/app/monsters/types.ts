@@ -42,6 +42,7 @@ export interface RollableAttack {
   name: string;
   formula: RollFormula;
   damageType?: DamageType;
+  omnivamp?: number; // percent of damage dealt returned as self-healing (always rounds up)
   description?: string;
   effects?: MonsterEffect[];
 }

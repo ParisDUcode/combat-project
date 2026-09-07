@@ -2,7 +2,7 @@ export type AbilityModifierTargetKind = 'stat' | 'derived';
 
 export interface AbilityModifierTarget {
   kind: AbilityModifierTargetKind;
-  target: 'PHYS' | 'CON' | 'INT' | 'SOC' | 'AC' | 'MR' | 'SPEED';
+  target: 'PHYS' | 'CON' | 'INT' | 'SOC' | 'AC' | 'MR' | 'SPEED' | 'OMNIVAMP';
 }
 
 export interface AbilityModifierLike {
@@ -14,6 +14,7 @@ export interface AbilityDerivedModifierTotals {
   ac: number;
   mr: number;
   speed: number;
+  omnivamp: number;
 }
 
 const STAT_ALIASES: Record<string, 'PHYS' | 'CON' | 'INT' | 'SOC'> = {
@@ -28,7 +29,7 @@ const STAT_ALIASES: Record<string, 'PHYS' | 'CON' | 'INT' | 'SOC'> = {
   CHA: 'SOC',
 };
 
-const DERIVED_ALIASES: Record<string, 'AC' | 'MR' | 'SPEED'> = {
+const DERIVED_ALIASES: Record<string, 'AC' | 'MR' | 'SPEED' | 'OMNIVAMP'> = {
   AC: 'AC',
   ARMOR: 'AC',
   ARMOUR: 'AC',
@@ -38,6 +39,10 @@ const DERIVED_ALIASES: Record<string, 'AC' | 'MR' | 'SPEED'> = {
   SPEED: 'SPEED',
   MOVE: 'SPEED',
   MOVEMENT: 'SPEED',
+  OMNIVAMP: 'OMNIVAMP',
+  'OMNI VAMP': 'OMNIVAMP',
+  LIFESTEAL: 'OMNIVAMP',
+  'LIFE STEAL': 'OMNIVAMP',
 };
 
 export const resolveAbilityModifierTarget = (value: unknown): AbilityModifierTarget | null => {
@@ -66,7 +71,8 @@ export const collectAbilityDerivedModifierTotals = (
     if (target.target === 'AC') acc.ac += value;
     if (target.target === 'MR') acc.mr += value;
     if (target.target === 'SPEED') acc.speed += value;
+    if (target.target === 'OMNIVAMP') acc.omnivamp += value;
 
     return acc;
-  }, { ac: 0, mr: 0, speed: 0 });
+  }, { ac: 0, mr: 0, speed: 0, omnivamp: 0 });
 };

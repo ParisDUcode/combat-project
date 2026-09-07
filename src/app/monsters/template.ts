@@ -7,6 +7,8 @@ export const MONSTER_TEMPLATE_INSTRUCTIONS = [
   "Use passive triggers for autonomous effects at encounter and turn checkpoints.",
   "Include a speed value for every monster; it is shown in combat cards and represents basic movement.",
   "Add an mr value when the monster should resist magic damage; use 0 for monsters without magic resistance.",
+  "Set omnivamp (percent) on an attack to heal the monster for that % of damage dealt, rounded up.",
+  "on_attack_hit passive healing is now applied to the monster's HP alongside omnivamp.",
 ].join("\n");
 
 export const MONSTER_TEMPLATE: MonsterDefinition = {
@@ -33,6 +35,7 @@ export const MONSTER_TEMPLATE: MonsterDefinition = {
         stat: "PHYS",
         flatBonus: 0,
       },
+      // omnivamp: 25, // optional: heal self for 25% of damage dealt (rounded up)
       description: "Baseline attack that scales with PHYS.",
     },
   ],

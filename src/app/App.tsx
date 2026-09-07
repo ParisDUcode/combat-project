@@ -107,6 +107,7 @@ interface InventoryItem {
   heal?: number; // flat heal to player when using this weapon
   healDie?: number; // roll this die to heal
   healStat?: StatKey; // add this stat to heal roll
+  omnivamp?: number; // percent of this weapon's damage dealt returned as healing (always rounds up)
   extraDamage?: number; // flat extra damage when using this weapon
   extraDice?: number; // number of extra dice to roll
   extraDie?: number; // sides of extra dice
@@ -202,6 +203,7 @@ const usesWeaponLogic = (item: InventoryItem | null | undefined) => Boolean(item
   || item.heal !== undefined
   || item.healDie !== undefined
   || item.healStat !== undefined
+  || item.omnivamp !== undefined
 ));
 
 // Lets descriptions flag an action as a bonus action without a dedicated data field.
@@ -236,6 +238,7 @@ const SECONDARY_DESCRIPTIONS: Record<string, string> = {
   magicResist: "Magic Resist — mitigates magical damage 1 to 1. Each point absorbs one point of incoming magic damage before it reaches your HP.",
   Initiative:  "Initiative — equals your PHYS score. Determines who acts first when combat begins.",
   Speed:       "Speed — base movement. Fighter starts at 3, Wizard starts at 2, then increases from boots and other gear. Used by the DM to determine range.",
+  Omnivamp:    "Omnivamp — heals you for that % of any damage you deal (rounded up). Granted by weapons and abilities.",
 };
 
 const EQUIP_SLOTS: { key: EquipSlot; label: string; accepts: ItemType[] }[] = [
@@ -813,7 +816,9 @@ export default function App() {
     if (d.statBonuses !== undefined) setStatBonuses(normalizeStatsObject(d.statBonuses));
     if (d.maxHp !== undefined) setMaxHp(d.maxHp);
     if (d.currentHp !== undefined) setCurrentHp(d.currentHp);
-    const incomingLogEntries = d.log !== undefined ? normalizeLogEntries(d.log) : log;
+    const incomingLogEntries = d.log !== undefined
+      ? [...normalizeLogEntries(d.log)].sort((a, b) => b.id - a.id) // newest-first, matches addLog
+      : log;
     if (d.log !== undefined) setLog(incomingLogEntries);
     if (d.nextId !== undefined || d.log !== undefined) {
       const logFallbackNextId = Math.max(0, ...incomingLogEntries.map((entry) => entry.id)) + 1;
@@ -952,7 +957,10 @@ export default function App() {
     const entryId = nextLogIdRef.current;
     const nextLogId = entryId + 1;
     nextLogIdRef.current = nextLogId;
-    setLog((prev) => [{ id: entryId, text, type }, ...prev].slice(0, 40));
+    // Keep the dice log newest-first so the most recent entry always renders at the top.
+    setLog((prev) => [{ id: entryId, text, type }, ...prev]
+      .sort((a, b) => b.id - a.id)
+      .slice(0, 40));
     setNextId(nextLogId);
   };
 
@@ -1057,8 +1065,9 @@ export default function App() {
       ac: acc.ac + derived.ac,
       mr: acc.mr + derived.mr,
       speed: acc.speed + derived.speed,
+      omnivamp: acc.omnivamp + derived.omnivamp,
     };
-  }, { ac: 0, mr: 0, speed: 0 });
+  }, { ac: 0, mr: 0, speed: 0, omnivamp: 0 });
   const equipmentScoreBonuses = Array.from(
     new Map(
       (Object.values(equipment).filter(Boolean) as InventoryItem[]).map((item) => [item.id, item]),
@@ -1303,6 +1312,7 @@ export default function App() {
     const phys = effectiveStats.PHYS;
     const roll = rollD(attackDie);
     applyDamage(roll + phys, `⚔ Basic Attack (${roll} + ${phys})`);
+    applyOmnivamp(roll + phys, "⚔ Basic Attack");
   };
 
   const rollAbilityCheck = (stat: StatKey) => {
@@ -1340,6 +1350,15 @@ export default function App() {
     }
   };
 
+  // Heals the attacker for a % of damage dealt (always rounds up).
+  const applyOmnivamp = (damageDealt: number, sourceLabel: string, itemPct = 0) => {
+    const pct = abilityDerivedModifiers.omnivamp + itemPct;
+    if (damageDealt <= 0 || pct <= 0) return;
+    const heal = Math.ceil((damageDealt * pct) / 100);
+    adjustHp(heal);
+    addLog(`${sourceLabel} — omnivamp ${pct}% healed ${heal} HP.`, "heal");
+  };
+
   const doWeaponAttack = (item: InventoryItem, atkIdx?: number) => {
     const chargedItem = normalizeWeaponCharges(item);
 
@@ -1362,6 +1381,7 @@ export default function App() {
         const outcome = evaluateWeaponFormula(formula, effectiveStats);
         if (outcome.ok) {
           applyDamage(outcome.total, `⚔ ${chargedItem.name} — ${atk.name} (${outcome.detail})`);
+          applyOmnivamp(outcome.total, `⚔ ${chargedItem.name} — ${atk.name}`, chargedItem.omnivamp ?? 0);
           return;
         }
       }
@@ -1379,6 +1399,7 @@ export default function App() {
         ? `${roll} + ${atk.stat}(${sv}) + ${bonus}`
         : `${roll} + ${atk.stat}(${sv})`;
       applyDamage(total, `⚔ ${chargedItem.name} — ${atk.name} (${detail})`);
+      applyOmnivamp(total, `⚔ ${chargedItem.name} — ${atk.name}`, chargedItem.omnivamp ?? 0);
       return;
     }
 
@@ -1395,6 +1416,7 @@ export default function App() {
       const outcome = evaluateWeaponFormula(formula, effectiveStats);
       if (outcome.ok) {
         applyDamage(outcome.total, `⚔ ${chargedItem.name} (${outcome.detail})`);
+        applyOmnivamp(outcome.total, `⚔ ${chargedItem.name}`, chargedItem.omnivamp ?? 0);
         applyWeaponHealing(chargedItem);
         return;
       }
@@ -1424,6 +1446,7 @@ export default function App() {
     }
 
     applyDamage(total, `⚔ ${chargedItem.name} (${detailParts.join(" + ")})`);
+    applyOmnivamp(total, `⚔ ${chargedItem.name}`, chargedItem.omnivamp ?? 0);
     applyWeaponHealing(chargedItem);
   };
 
@@ -1494,6 +1517,7 @@ export default function App() {
 
     if (hasRollResult) {
       applyDamage(total, `✦ ${ability.name} — ${action.name} (${detail})`);
+      applyOmnivamp(total, `✦ ${ability.name} — ${action.name}`);
     } else {
       addLog(
         `✦ ${ability.name} — ${action.name}${action.description ? `: ${action.description}` : ""}`,
@@ -1537,6 +1561,7 @@ export default function App() {
                 ...(entry.heal !== undefined ? { heal: Number(entry.heal) } : {}),
                 ...(entry.healDie !== undefined ? { healDie: Number(entry.healDie) } : {}),
                 ...(entry.healStat !== undefined && canonicalStatKey(entry.healStat) ? { healStat: canonicalStatKey(entry.healStat) as StatKey } : {}),
+                ...(entry.omnivamp !== undefined ? { omnivamp: Number(entry.omnivamp) } : {}),
                 ...(entry.extraDamage !== undefined ? { extraDamage: Number(entry.extraDamage) } : {}),
                 ...(entry.extraDice !== undefined ? { extraDice: Number(entry.extraDice) } : {}),
                 ...(entry.extraDie !== undefined ? { extraDie: Number(entry.extraDie) } : {}),
@@ -1951,7 +1976,9 @@ export default function App() {
     logCombat(`${relabelLog(monster, resolved.logLine)} → ${player.name}`);
     resolved.effectLines.forEach((line) => logCombat(relabelLog(monster, line)));
     setCombatMonsters((prev) =>
-      prev.map((entry) => (entry.uid === monster.uid ? { ...entry, runtime: resolved.runtime } : entry)),
+      prev.map((entry) => (entry.uid === monster.uid
+        ? { ...entry, currentHp: Math.min(entry.def.hp, entry.currentHp + resolved.selfHealing), runtime: resolved.runtime }
+        : entry)),
     );
     setCombatPlayers((prev) =>
       prev.map((p) => p.uid === player.uid ? { ...p, currentHp: Math.max(0, p.currentHp - raw) } : p)
@@ -2146,6 +2173,7 @@ export default function App() {
       "- Formula field: weaponFormula (string)\n" +
       "- If weaponFormula is present, it overrides legacy damage fields for damage calc.\n" +
       "- heal (number), healDie (number), healStat (PHYS|CON|INT|SOC) are supported in this mode.\n" +
+      "- omnivamp (number) heals for a % of damage dealt with this weapon, rounded up. Applies in both modes.\n" +
       "\nMULTI-ATTACK DAMAGE MODE (attacks array present):\n" +
       "- attacks: [{ name, die?, stat?, formula?, damageBonus?, consumesCharge?, description? }]\n" +
       "- Each attack must include either formula OR (die and stat).\n" +
@@ -2280,8 +2308,8 @@ export default function App() {
       "- abilities accepts Scars, Feats, and Abilities with type (Feat|Scar|Ability).\n" +
       "- spells accepts spell-like entries with isSpell: true and optional spell-specific fields.\n" +
       "- For abilities, support tallyFormula, modifiers, and actions just like the existing ability importer.\n" +
-      "- Ability modifiers can target regular stats (PHYS, CON, INT, SOC, plus common aliases like STR, DEX, WIS, CHA, SOCIAL) and derived traits (AC/Armor, MR/Magic Resist, Speed).\n" +
-      "- Feat and ability modifiers for AC, MR, and Speed now affect the character's actual derived combat values used by the sheet and damage mitigation logic.\n" +
+      "- Ability modifiers can target regular stats (PHYS, CON, INT, SOC, plus common aliases like STR, DEX, WIS, CHA, SOCIAL) and derived traits (AC/Armor, MR/Magic Resist, Speed, Omnivamp %).\n" +
+      "- Feat and ability modifiers for AC, MR, Speed, and Omnivamp now affect the character's actual derived combat values used by the sheet and damage mitigation logic. Omnivamp heals for that % of damage dealt (rounded up).\n" +
       "- For spells, support damageDie, damageStat, statModifiers, slotCost, slotCostMax, and scaleDamageBySlots.\n" +
       "- A spell can use just damageDie if you want a die-only effect with no extra stat bonus; damageStat is optional.\n" +
       "\nBehavior implemented by the app:\n" +
@@ -2471,6 +2499,7 @@ export default function App() {
       } else {
         addLog(`✨ ${spell.name} — ${selectedSlotCount} slot${selectedSlotCount > 1 ? "s" : ""}; ${damageRolls}d${spell.damageDie}(${totalRoll}) = ${damage} damage dealt`, "info");
       }
+      applyOmnivamp(damage, `✨ ${spell.name}`);
     } else {
       addLog(`✨ Cast ${spell.name} using ${selectedSlotCount} slot${selectedSlotCount > 1 ? "s" : ""}`, "info");
     }
@@ -2488,6 +2517,7 @@ export default function App() {
   const baseSpeed = selectedClass === "Fighter" ? 3 : selectedClass === "Wizard" ? 2 : 0;
   const speed = baseSpeed + equippedItems.reduce((sum, item) => sum + (item.speedBonus ?? 0), 0) + abilityDerivedModifiers.speed;
   const displaySpeed = fighterDashActive ? speed * 2 : speed;
+  const omnivamp = abilityDerivedModifiers.omnivamp;
   const levelNumber = level === "" ? 1 : Number(level);
   const wizardCounterspellMaxCharges = selectedClass === "Wizard" && levelNumber >= 7 ? Math.floor((levelNumber - 7) / 2) + 1 : 0;
   const initiative = effectiveStats.PHYS;
@@ -2890,7 +2920,17 @@ export default function App() {
                   },
                   { key: "Initiative", icon: <Zap size={13} style={{ color: "#9a8a6a" }} />, val: initiative },
                   { key: "Speed",      icon: <Footprints size={14} style={{ color: "#9a8a6a" }} />, val: displaySpeed },
-                ] as { key: string; icon: React.ReactNode; val: number }[]).map(({ key, icon, val }) => {
+                  ...(omnivamp > 0 ? [{
+                    key: "Omnivamp",
+                    icon: (
+                      <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                        <path d="M7 1.5C7 1.5 2.5 6.4 2.5 9a4.5 4.5 0 0 0 9 0C11.5 6.4 7 1.5 7 1.5Z" stroke="#c46a6a" strokeWidth="1.4" fill="none"/>
+                      </svg>
+                    ),
+                    val: omnivamp,
+                    suffix: "%" as const,
+                  }] : []),
+                ] as { key: string; icon: React.ReactNode; val: number; suffix?: string }[]).map(({ key, icon, val, suffix }) => {
                   const active = statPopup === key;
                   return (
                     <div key={key}
@@ -2899,7 +2939,7 @@ export default function App() {
                       style={{ border: `1px solid ${active ? "rgba(196,133,58,0.5)" : "rgba(196,133,58,0.15)"}`, borderRadius: 4, background: active ? "rgba(196,133,58,0.06)" : "#0e0c08" }}
                     >
                       <div className="mb-1 flex items-center justify-center" style={{ height: 18 }}>{icon}</div>
-                      <span style={{ fontFamily: "'JetBrains Mono', monospace", color: "#c4853a", fontSize: 15, fontWeight: 700 }}>{val}</span>
+                      <span style={{ fontFamily: "'JetBrains Mono', monospace", color: "#c4853a", fontSize: 15, fontWeight: 700 }}>{val}{suffix ?? ""}</span>
                     </div>
                   );
                 })}
@@ -3331,6 +3371,7 @@ export default function App() {
                                   {atk.formula
                                     ? attackPreview
                                     : `d${atk.die ?? "?"} + ${atk.stat ?? "?"}(${sv})${atk.damageBonus ? ` +${atk.damageBonus}` : ""}`}
+                                  {normalizedWeapon.omnivamp ? ` • omnivamp ${normalizedWeapon.omnivamp}%` : null}
                                 </div>
                                 {atk.description ? (
                                   <div className="text-xs leading-snug mt-1" style={{ color: "#8a7a5a", fontFamily: "'Crimson Pro', serif" }}>
@@ -3371,6 +3412,7 @@ export default function App() {
                           {!normalizedWeapon.weaponFormula && normalizedWeapon.extraDamage ? ` + ${normalizedWeapon.extraDamage} dmg` : null}
                           {normalizedWeapon.heal ? ` • heals ${normalizedWeapon.heal}` : null}
                           {normalizedWeapon.healDie ? ` • heals d${normalizedWeapon.healDie}${normalizedWeapon.healStat ? ` + ${normalizedWeapon.healStat}` : ""}` : null}
+                          {normalizedWeapon.omnivamp ? ` • omnivamp ${normalizedWeapon.omnivamp}%` : null}
                         </div>
                       </button>
                       {maxCharges ? (
@@ -4890,7 +4932,9 @@ export default function App() {
                               logCombat(relabelLog(cm, resolved.logLine));
                               resolved.effectLines.forEach((line) => logCombat(relabelLog(cm, line)));
                               setCombatMonsters((prev) =>
-                                prev.map((monster) => (monster.uid === cm.uid ? { ...monster, runtime: resolved.runtime } : monster)),
+                                prev.map((monster) => (monster.uid === cm.uid
+                                  ? { ...monster, currentHp: Math.min(monster.def.hp, monster.currentHp + resolved.selfHealing), runtime: resolved.runtime }
+                                  : monster)),
                               );
                             }}
                             className="transition-opacity px-2 py-1"
@@ -4907,6 +4951,7 @@ export default function App() {
                                 {`d${atk.formula.diceSides}x${atk.formula.diceCount}`}
                                 {atk.formula.stat ? `+${cm.def.stats[atk.formula.stat]}` : ""}
                                 {atk.formula.flatBonus ? `+${atk.formula.flatBonus}` : ""}
+                                {atk.omnivamp ? ` • omni ${atk.omnivamp}%` : ""}
                               </span>
                             </div>
                             {atk.description && <div className="text-xs leading-tight mt-0.5 italic" style={{ color: "#6a5a3a", fontFamily: "'Crimson Pro', serif", fontSize: 10 }}>{atk.description}</div>}
@@ -5243,7 +5288,7 @@ export default function App() {
           <div className="p-7 flex flex-col gap-4 w-full max-w-2xl" style={{ background: "#0e0c08", border: "1px solid rgba(196,133,58,0.4)", borderRadius: 8 }} onClick={(e) => e.stopPropagation()}>
             <div className="text-base font-bold" style={{ fontFamily: "'Cinzel', serif", color: "#c4853a" }}>Paste Item JSON</div>
             <p className="text-sm" style={{ color: "#9a8a6a", fontFamily: "'Crimson Pro', serif" }}>
-              Paste one item object or an array of item objects. Supports stat bonuses (PHYS/CON/INT/SOC), speed, armor, and magic resist bonuses on any item type, plus legacy fields, formulas, multi-attacks, per-attack descriptions, high charge pools, and custom icons.
+              Paste one item object or an array of item objects. Supports stat bonuses (PHYS/CON/INT/SOC), speed, armor, and magic resist bonuses on any item type, plus legacy fields, formulas, multi-attacks, per-attack descriptions, omnivamp %, high charge pools, and custom icons.
             </p>
             <textarea
               autoFocus

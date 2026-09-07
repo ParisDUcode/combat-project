@@ -23,7 +23,20 @@ test('collects derived totals from modifiers', () => {
     (value) => Number(value),
   );
 
-  assert.deepEqual(totals, { ac: 2, mr: 1, speed: 3 });
+  assert.deepEqual(totals, { ac: 2, mr: 1, speed: 3, omnivamp: 0 });
+});
+
+test('resolves omnivamp aliases and collects omnivamp totals', () => {
+  assert.deepEqual(resolveAbilityModifierTarget('Omnivamp'), { kind: 'derived', target: 'OMNIVAMP' });
+  assert.deepEqual(resolveAbilityModifierTarget('Omni Vamp'), { kind: 'derived', target: 'OMNIVAMP' });
+  assert.deepEqual(resolveAbilityModifierTarget('Lifesteal'), { kind: 'derived', target: 'OMNIVAMP' });
+
+  const totals = collectAbilityDerivedModifierTotals(
+    [{ label: 'Omnivamp', value: '10' }, { label: 'Life Steal', value: '5' }],
+    (value) => Number(value),
+  );
+
+  assert.deepEqual(totals, { ac: 0, mr: 0, speed: 0, omnivamp: 15 });
 });
 
 test('returns null for unsupported labels', () => {

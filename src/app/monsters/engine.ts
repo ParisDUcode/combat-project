@@ -25,6 +25,7 @@ export interface PassiveResolution {
 export interface AttackResolution {
   runtime: MonsterCombatRuntime;
   damage: number;
+  selfHealing: number;
   logLine: string;
   effectLines: string[];
 }
@@ -179,9 +180,17 @@ export const resolveMonsterAttack = (
     if (outcome.logLine) effectLines.push(outcome.logLine);
   });
 
+  let selfHealing = passive.healing;
+  if (attack.omnivamp && attack.omnivamp > 0 && totalDamage > 0) {
+    const omniHeal = Math.ceil((totalDamage * attack.omnivamp) / 100);
+    selfHealing += omniHeal;
+    effectLines.push(`${monster.name} omnivamp ${attack.omnivamp}% — restores ${omniHeal} HP.`);
+  }
+
   return {
     runtime: passive.runtime,
     damage: totalDamage,
+    selfHealing,
     logLine: parts.join(" "),
     effectLines,
   };
