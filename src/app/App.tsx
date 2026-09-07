@@ -953,6 +953,9 @@ export default function App() {
   }, [nextId]);
 
   // ─── HP ──────────────────────────────────────────────────────────────────
+  const diceLogRef = useRef<HTMLDivElement | null>(null);
+  const [latestLogId, setLatestLogId] = useState<number | null>(null);
+
   const addLog = (text: string, type: LogEntry["type"]) => {
     const entryId = nextLogIdRef.current;
     const nextLogId = entryId + 1;
@@ -962,7 +965,19 @@ export default function App() {
       .sort((a, b) => b.id - a.id)
       .slice(0, 40));
     setNextId(nextLogId);
+    setLatestLogId(entryId);
+    // Snap the log back to the top (newest entry) on every new roll.
+    requestAnimationFrame(() => {
+      if (diceLogRef.current) diceLogRef.current.scrollTop = 0;
+    });
   };
+
+  // Keep the newest roll highlighted briefly, then fade back to normal.
+  useEffect(() => {
+    if (latestLogId === null) return;
+    const timer = window.setTimeout(() => setLatestLogId(null), 1600);
+    return () => window.clearTimeout(timer);
+  }, [latestLogId]);
 
   const clearDiceLog = () => {
     nextLogIdRef.current = 1;
@@ -3824,13 +3839,24 @@ export default function App() {
                 <button onClick={clearDiceLog}
                   className="text-xs hover:opacity-70 transition-opacity" style={{ color: "#9a8a6a", fontFamily: "'Cinzel', serif", cursor: "pointer", background: "none", border: "none" }}>Clear</button>
               </div>
-              <div className="flex flex-col gap-1.5 overflow-y-auto" style={{ maxHeight: 220, scrollbarWidth: "thin", scrollbarColor: "rgba(196,133,58,0.2) transparent" }}>
-                {log.map((entry) => (
-                  <div key={entry.id} className="flex gap-2 text-sm leading-snug py-1 border-b" style={{ borderColor: "rgba(196,133,58,0.06)" }}>
+              <div ref={diceLogRef} className="flex flex-col gap-1.5 overflow-y-auto" style={{ maxHeight: 220, scrollbarWidth: "thin", scrollbarColor: "rgba(196,133,58,0.2) transparent" }}>
+                {log.map((entry) => {
+                  const isLatest = entry.id === latestLogId;
+                  return (
+                  <div key={entry.id} className="flex gap-2 text-sm leading-snug py-1 border-b"
+                    style={{
+                      borderColor: "rgba(196,133,58,0.06)",
+                      background: isLatest ? "rgba(196,133,58,0.14)" : "transparent",
+                      borderLeft: isLatest ? "2px solid #c4853a" : "2px solid transparent",
+                      paddingLeft: 4,
+                      borderRadius: 2,
+                      transition: "background 0.8s ease, border-color 0.8s ease",
+                    }}>
                     <span className="shrink-0 select-none" style={{ color: "rgba(196,133,58,0.4)", fontFamily: "'JetBrains Mono', monospace", fontSize: 11, paddingTop: 2 }}>{String(entry.id).padStart(2, "0")}</span>
                     <span style={{ color: logColor[entry.type], fontFamily: "'Crimson Pro', serif", fontSize: 14 }}>{entry.text}</span>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
 
