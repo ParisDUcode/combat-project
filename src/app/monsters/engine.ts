@@ -169,7 +169,7 @@ export const resolveMonsterAttack = (
   const rawDamage = Math.max(0, roll.total + passive.bonusDamage);
   const totalDamage = applyDamageTypeResistance(rawDamage, attack.damageType, monster);
   const parts = [`${monster.name} - ${attack.name}`, `(${roll.diceResults.join("+") || "0"}`];
-  parts.push(`+${roll.statBonus}`);
+  if (roll.statBonus) parts.push(`+${roll.statBonus}`);
   if (roll.flatBonus) parts.push(`+${roll.flatBonus}`);
   parts.push(`) = ${totalDamage} damage`);
 

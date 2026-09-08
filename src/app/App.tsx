@@ -692,7 +692,7 @@ export default function App() {
     } else if (trimmedName) {
       document.title = trimmedName;
     } else {
-      document.title = "Hunter's Palette";
+      document.title = "Project Combat: H.O.G.";
     }
   }, [characterName, combatActive]);
 
@@ -1376,15 +1376,27 @@ export default function App() {
     };
   }, []);
 
+  // Heals the attacker for a % of damage dealt (always rounds up), applied directly without its own log entry.
+  const applyOmnivampHeal = (damageDealt: number): number => {
+    const pct = omnivamp;
+    if (damageDealt <= 0 || pct <= 0) return 0;
+    const heal = Math.ceil((damageDealt * pct) / 100);
+    const cur = typeof currentHp === "number" ? currentHp : 0;
+    const max = typeof maxHp === "number" ? maxHp : 0;
+    setCurrentHp(Math.max(0, Math.min(max || Infinity, cur + heal)));
+    return heal;
+  };
+
   const applyDamage = (raw: number, label: string) => {
-    addLog(`${label} — ${raw} damage dealt`, raw > 0 ? "hit" : "miss");
+    const heal = applyOmnivampHeal(raw);
+    const healSuffix = heal > 0 ? ` • omnivamp ${omnivamp}% heals ${heal} HP` : "";
+    addLog(`${label} — ${raw} damage dealt${healSuffix}`, raw > 0 ? "hit" : "miss");
   };
 
   const doBasicAttack = () => {
     const phys = effectiveStats.PHYS;
     const roll = rollD(attackDie);
     applyDamage(roll + phys, `⚔ Basic Attack (${roll} + ${phys})`);
-    applyOmnivamp(roll + phys, "⚔ Basic Attack");
   };
 
   const rollAbilityCheck = (stat: StatKey) => {
@@ -1422,15 +1434,6 @@ export default function App() {
     }
   };
 
-  // Heals the attacker for a % of damage dealt (always rounds up). Uses the character-wide omnivamp pool.
-  const applyOmnivamp = (damageDealt: number, sourceLabel: string) => {
-    const pct = omnivamp;
-    if (damageDealt <= 0 || pct <= 0) return;
-    const heal = Math.ceil((damageDealt * pct) / 100);
-    adjustHp(heal);
-    addLog(`${sourceLabel} — omnivamp ${pct}% healed ${heal} HP.`, "heal");
-  };
-
   const doWeaponAttack = (item: InventoryItem, atkIdx?: number) => {
     const chargedItem = normalizeWeaponCharges(item);
 
@@ -1453,7 +1456,6 @@ export default function App() {
         const outcome = evaluateWeaponFormula(formula, effectiveStats);
         if (outcome.ok) {
           applyDamage(outcome.total, `⚔ ${chargedItem.name} — ${atk.name} (${outcome.detail})`);
-          applyOmnivamp(outcome.total, `⚔ ${chargedItem.name} — ${atk.name}`);
           return;
         }
       }
@@ -1471,7 +1473,6 @@ export default function App() {
         ? `${roll} + ${atk.stat}(${sv}) + ${bonus}`
         : `${roll} + ${atk.stat}(${sv})`;
       applyDamage(total, `⚔ ${chargedItem.name} — ${atk.name} (${detail})`);
-      applyOmnivamp(total, `⚔ ${chargedItem.name} — ${atk.name}`);
       return;
     }
 
@@ -1488,7 +1489,6 @@ export default function App() {
       const outcome = evaluateWeaponFormula(formula, effectiveStats);
       if (outcome.ok) {
         applyDamage(outcome.total, `⚔ ${chargedItem.name} (${outcome.detail})`);
-        applyOmnivamp(outcome.total, `⚔ ${chargedItem.name}`);
         applyWeaponHealing(chargedItem);
         return;
       }
@@ -1518,7 +1518,6 @@ export default function App() {
     }
 
     applyDamage(total, `⚔ ${chargedItem.name} (${detailParts.join(" + ")})`);
-    applyOmnivamp(total, `⚔ ${chargedItem.name}`);
     applyWeaponHealing(chargedItem);
   };
 
@@ -1589,7 +1588,6 @@ export default function App() {
 
     if (hasRollResult) {
       applyDamage(total, `✦ ${ability.name} — ${action.name} (${detail})`);
-      applyOmnivamp(total, `✦ ${ability.name} — ${action.name}`);
     } else {
       addLog(
         `✦ ${ability.name} — ${action.name}${action.description ? `: ${action.description}` : ""}`,
@@ -2723,12 +2721,15 @@ export default function App() {
       const statBonus = spell.damageStat ? effectiveStats[spell.damageStat] : 0;
       const damage = totalRoll + statBonus;
 
+      const healSuffix = (() => {
+        const heal = applyOmnivampHeal(damage);
+        return heal > 0 ? ` • omnivamp ${omnivamp}% heals ${heal} HP` : "";
+      })();
       if (spell.damageStat) {
-        addLog(`✨ ${spell.name} — ${selectedSlotCount} slot${selectedSlotCount > 1 ? "s" : ""}; ${damageRolls}d${spell.damageDie}(${totalRoll}) + ${spell.damageStat}(${statBonus}) = ${damage} damage dealt`, "info");
+        addLog(`✨ ${spell.name} — ${selectedSlotCount} slot${selectedSlotCount > 1 ? "s" : ""}; ${damageRolls}d${spell.damageDie}(${totalRoll}) + ${spell.damageStat}(${statBonus}) = ${damage} damage dealt${healSuffix}`, "info");
       } else {
-        addLog(`✨ ${spell.name} — ${selectedSlotCount} slot${selectedSlotCount > 1 ? "s" : ""}; ${damageRolls}d${spell.damageDie}(${totalRoll}) = ${damage} damage dealt`, "info");
+        addLog(`✨ ${spell.name} — ${selectedSlotCount} slot${selectedSlotCount > 1 ? "s" : ""}; ${damageRolls}d${spell.damageDie}(${totalRoll}) = ${damage} damage dealt${healSuffix}`, "info");
       }
-      applyOmnivamp(damage, `✨ ${spell.name}`);
     } else {
       addLog(`✨ Cast ${spell.name} using ${selectedSlotCount} slot${selectedSlotCount > 1 ? "s" : ""}`, "info");
     }
@@ -2923,7 +2924,7 @@ export default function App() {
       )}
       <div className="w-full h-1" style={{ background: "linear-gradient(90deg, transparent, #c4853a 30%, #8b1c1c 50%, #c4853a 70%, transparent)" }} />
 
-      <div className="max-w-5xl mx-auto p-4 md:p-6">
+      <div className="max-w-[1440px] w-full mx-auto px-6 py-4">
 
         {activeTheme && (
           <div
@@ -3135,7 +3136,7 @@ export default function App() {
         </div>
 
         {/* Main grid */}
-        <div className="grid grid-cols-1 md:grid-cols-[260px_1fr] xl:grid-cols-[260px_1fr_320px] gap-3 xl:h-[calc(100vh-140px)]">
+        <div className="grid grid-cols-1 md:grid-cols-[260px_1fr] xl:grid-cols-[280px_1fr_1fr] gap-3 xl:h-[calc(100vh-140px)]">
 
           {/* LEFT: Portrait + Stats */}
           <div className="flex flex-col gap-3 xl:overflow-y-auto" style={{ scrollbarWidth: "thin", scrollbarColor: "rgba(196,133,58,0.2) transparent" }}>
@@ -4111,7 +4112,7 @@ export default function App() {
           </div>{/* end Column 2 (Center: Combat Actions) */}
 
           {/* RIGHT: Economy & Utilities (Column 3, scrolls internally) */}
-          <div className="flex flex-col gap-3 xl:h-full xl:overflow-y-auto" style={{ scrollbarWidth: "thin", scrollbarColor: "rgba(196,133,58,0.2) transparent" }}>
+          <div className="flex flex-col gap-3 xl:h-full xl:overflow-y-auto" style={{ scrollbarWidth: "thin", scrollbarColor: "rgba(196,133,58,0.2) transparent", paddingBottom: 220 }}>
 
             {/* Combat Tracker */}
             <div style={panelStyle}>
@@ -5280,7 +5281,7 @@ export default function App() {
                               <span className="text-xs font-bold" style={{ fontFamily: "'Cinzel', serif", color: "#e2cfa0" }}>{atk.name}</span>
                               <span style={{ fontFamily: "'JetBrains Mono', monospace", color: "#9a8a6a", fontSize: 10 }}>
                                 {`d${atk.formula.diceSides}x${atk.formula.diceCount}`}
-                                {atk.formula.stat ? `+${cm.def.stats[atk.formula.stat]}` : ""}
+                                {atk.formula.stat && cm.def.stats[atk.formula.stat] ? `+${cm.def.stats[atk.formula.stat]}` : ""}
                                 {atk.formula.flatBonus ? `+${atk.formula.flatBonus}` : ""}
                                 {atk.omnivamp ? ` • omni ${atk.omnivamp}%` : ""}
                               </span>
