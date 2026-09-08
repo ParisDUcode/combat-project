@@ -2395,7 +2395,7 @@ export default function App() {
       "- Spells are stored as ability-like entries with isSpell: true so they can share the same data model.\n" +
       "- If slotCostMax is absent, the spell uses the fixed slotCost. If slotCostMax is present, the player can choose a value between slotCost and slotCostMax.\n" +
       "- Die-only spells still cast normally; when damageStat is absent, the roll is just the damage die result.\n" +
-      "- Theme Mode changes the page color treatment and displays the configured emoji prominently in the center with smaller repeated accents around the screen.\n" +
+      "- Theme Mode changes the page color treatment and displays the configured emoji prominently in a dedicated banner above the sheet, with smaller repeated accents that do not cover core controls.\n" +
       "\nSTRICT MINIMAL VALID OUTPUTS:\n" +
       "- Minimal shared payload:\n" +
       "  {\"abilities\":[{\"name\":\"Veteran\",\"type\":\"Feat\",\"description\":\"...\"}],\"spells\":[{\"name\":\"Spark\",\"type\":\"Ability\",\"isSpell\":true,\"description\":\"Quick magical strike.\",\"damageDie\":4,\"damageStat\":\"INT\",\"slotCost\":2,\"scaleDamageBySlots\":true}]}\n" +
@@ -2762,46 +2762,48 @@ export default function App() {
       style={themeRootStyle}
     >
       {activeTheme && (
-        <>
-          <div
-            aria-hidden="true"
-            style={{
-              position: "fixed",
-              inset: 0,
-              zIndex: 5,
-              pointerEvents: "none",
-              background: themeAccent,
-              opacity: themeOverlayOpacity,
-              mixBlendMode: "screen",
-            }}
-          />
-          <div
-            aria-label={`${themeEmoji} theme mode`}
-            style={{
-              position: "fixed",
-              inset: 0,
-              zIndex: 6,
-              pointerEvents: "none",
-              overflow: "hidden",
-            }}
-          >
-            <div style={{ position: "absolute", top: "42%", left: "50%", transform: "translate(-50%, -50%)", fontSize: themeEmojiSize, lineHeight: 1, filter: `drop-shadow(0 0 18px ${themeAccent})` }}>
-              {themeEmoji}
-            </div>
-            {["8% 18%", "86% 14%", "14% 74%", "82% 78%", "50% 12%", "52% 88%", "4% 48%", "94% 52%"].map((position, index) => {
-              const [left, top] = position.split(" ");
-              return (
-                <span key={index} style={{ position: "absolute", left, top, fontSize: 30 + (index % 3) * 10, opacity: 0.72, transform: `rotate(${index % 2 === 0 ? -12 : 12}deg)` }}>
-                  {themeEmoji}
-                </span>
-              );
-            })}
-          </div>
-        </>
+        <div
+          aria-hidden="true"
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 5,
+            pointerEvents: "none",
+            background: themeAccent,
+            opacity: themeOverlayOpacity,
+            mixBlendMode: "screen",
+          }}
+        />
       )}
       <div className="w-full h-1" style={{ background: "linear-gradient(90deg, transparent, #c4853a 30%, #8b1c1c 50%, #c4853a 70%, transparent)" }} />
 
       <div className="max-w-5xl mx-auto p-4 md:p-6">
+
+        {activeTheme && (
+          <div
+            aria-label={`${themeEmoji} theme mode`}
+            className="relative flex items-center justify-center h-16 mb-4 overflow-hidden"
+            style={{
+              color: themeText,
+              border: `1px solid ${themeAccent}66`,
+              background: `${themeBackground}cc`,
+              boxShadow: `0 0 24px ${themeAccent}22`,
+            }}
+          >
+            {["left-6", "left-16", "right-6", "right-16"].map((position, index) => (
+              <span
+                key={position}
+                className={`absolute ${position}`}
+                style={{ fontSize: 20 + (index % 2) * 6, opacity: 0.68, transform: `rotate(${index % 2 === 0 ? -10 : 10}deg)` }}
+              >
+                {themeEmoji}
+              </span>
+            ))}
+            <span style={{ fontSize: Math.min(themeEmojiSize, 72), lineHeight: 1, filter: `drop-shadow(0 0 12px ${themeAccent})` }}>
+              {themeEmoji}
+            </span>
+          </div>
+        )}
 
         {/* Admin */}
         <div className="relative inline-block mb-4" onClick={(e) => e.stopPropagation()}>
