@@ -156,6 +156,7 @@ interface InventoryItem {
   maxCharges?: number;        // max resource charges (shown as dots, restored on long rest unless Persistent)
   currentCharges?: number;    // remaining charges
   sacrificeRewards?: SacrificeReward[];
+  lookupKey?: string; // Content Lookup sheet Key this item was fetched with, if any
 }
 
 const BASE_CHEST: InventoryItem = {
@@ -466,6 +467,22 @@ const isSpellLikeEntry = (entry: any): boolean => Boolean(entry?.isSpell)
   || entry?.slotCost !== undefined
   || entry?.slotCostMax !== undefined
   || entry?.scaleDamageBySlots !== undefined;
+
+// Distinguishes scar/feat/ability/spell payloads from item payloads by shape, since the Content Lookup sheet has no discriminator column.
+const detectLookupPayloadKind = (data: any): "item" | "sharedContent" => {
+  if (data && typeof data === "object" && (Array.isArray(data.abilities) || Array.isArray(data.spells))) {
+    return "sharedContent";
+  }
+  const sample = Array.isArray(data) ? data[0] : data;
+  if (sample && typeof sample === "object") {
+    if (["Feat", "Scar", "Ability"].includes(sample.type)) return "sharedContent";
+    if (isSpellLikeEntry(sample)) return "sharedContent";
+  }
+  return "item";
+};
+
+// Feature flag: standalone "Items" list is hidden so items only appear in the Bag; toggle to restore it.
+const SHOW_ITEMS_SUBSECTION = false;
 
 // Safely evaluate a formula string with level + stat variables
 function evaluateFormula(formula: string, lvl: number, s: Stats): number {
@@ -1000,7 +1017,6 @@ export default function App() {
 
   // ─── HP ──────────────────────────────────────────────────────────────────
   const diceLogRef = useRef<HTMLDivElement | null>(null);
-  const [latestLogId, setLatestLogId] = useState<number | null>(null);
 
   const addLog = (text: string, type: LogEntry["type"]) => {
     const entryId = nextLogIdRef.current;
@@ -1011,19 +1027,11 @@ export default function App() {
       .sort((a, b) => b.id - a.id)
       .slice(0, 40));
     setNextId(nextLogId);
-    setLatestLogId(entryId);
     // Snap the log back to the top (newest entry) on every new roll.
     requestAnimationFrame(() => {
       if (diceLogRef.current) diceLogRef.current.scrollTop = 0;
     });
   };
-
-  // Keep the newest roll highlighted briefly, then fade back to normal.
-  useEffect(() => {
-    if (latestLogId === null) return;
-    const timer = window.setTimeout(() => setLatestLogId(null), 1600);
-    return () => window.clearTimeout(timer);
-  }, [latestLogId]);
 
   const clearDiceLog = () => {
     nextLogIdRef.current = 1;
@@ -1592,8 +1600,8 @@ export default function App() {
 
 
   // ─── Inventory ───────────────────────────────────────────────────────────
-  // Shared by the admin paste-JSON modal and the Item Lookup search bar.
-  const importItemsFromPayload = (jsonText: string): { success: boolean; count: number; error?: string } => {
+  // Shared by the admin paste-JSON modal and the Content Lookup search bar.
+  const importItemsFromPayload = (jsonText: string, sourceKey?: string): { success: boolean; count: number; error?: string } => {
     try {
       const data = JSON.parse(jsonText);
       const itemsData = Array.isArray(data) ? data : [data];
@@ -1666,6 +1674,7 @@ export default function App() {
                     }
                   : {}),
                 ...(entry.description ? { description: entry.description } : {}),
+                ...(sourceKey ? { lookupKey: sourceKey } : {}),
               } as InventoryItem;
         });
 
@@ -1693,7 +1702,7 @@ export default function App() {
       const map = await fetchItemLookupMap();
       setItemLookupMap(map);
     } catch (err) {
-      setItemLookupError(err instanceof Error ? err.message : "Failed to load item sheet.");
+      setItemLookupError(err instanceof Error ? err.message : "Failed to load content sheet.");
     } finally {
       setItemLookupLoading(false);
     }
@@ -1710,7 +1719,7 @@ export default function App() {
         map = await fetchItemLookupMap();
         setItemLookupMap(map);
       } catch (err) {
-        setItemLookupError(err instanceof Error ? err.message : "Failed to load item sheet.");
+        setItemLookupError(err instanceof Error ? err.message : "Failed to load content sheet.");
         setItemLookupLoading(false);
         return;
       }
@@ -1719,10 +1728,20 @@ export default function App() {
     const normalizedQuery = query.toLowerCase();
     const matchedKey = Array.from(map.keys()).find((key) => key.toLowerCase() === normalizedQuery);
     if (!matchedKey) {
-      setItemLookupError(`No item found matching "${query}".`);
+      setItemLookupError(`No content found matching "${query}".`);
       return;
     }
-    const result = importItemsFromPayload(map.get(matchedKey)!);
+    const payload = map.get(matchedKey)!;
+    let kind: "item" | "sharedContent" = "item";
+    try {
+      kind = detectLookupPayloadKind(JSON.parse(payload));
+    } catch {
+      setItemLookupError(`Invalid item data for "${matchedKey}".`);
+      return;
+    }
+    const result = kind === "sharedContent"
+      ? importSharedContentFromPayload(payload)
+      : importItemsFromPayload(payload, matchedKey);
     if (result.success) {
       setItemLookupQuery("");
       setItemLookupError("");
@@ -1859,6 +1878,27 @@ export default function App() {
   const copyItemJson = (item: InventoryItem) => {
     const { id, ...rest } = item;
     copyJsonToClipboard(rest, item.name || "Item");
+  };
+
+  const copyItemLookupKey = async (item: InventoryItem) => {
+    if (copyToastTimerRef.current !== null) window.clearTimeout(copyToastTimerRef.current);
+    if (!item.lookupKey) {
+      setCopyToast(`"${item.name}" wasn't added via Content Lookup`);
+      copyToastTimerRef.current = window.setTimeout(() => setCopyToast(null), 1600);
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(item.lookupKey);
+    } catch {
+      const t = document.createElement("textarea");
+      t.value = item.lookupKey;
+      document.body.appendChild(t);
+      t.select();
+      document.execCommand("copy");
+      document.body.removeChild(t);
+    }
+    setCopyToast(`Copied key: "${item.lookupKey}"`);
+    copyToastTimerRef.current = window.setTimeout(() => setCopyToast(null), 1600);
   };
 
   const clearHiddenDisplayForItem = (itemId: number) => {
@@ -2537,7 +2577,7 @@ export default function App() {
     setAdminOpen(false);
   };
 
-  const importSharedContentFromText = (text: string) => {
+  const importSharedContentFromPayload = (text: string): { success: boolean; count: number; error?: string } => {
     try {
       const payload = JSON.parse(text);
       const abilityEntries = Array.isArray(payload?.abilities)
@@ -2621,20 +2661,33 @@ export default function App() {
         ...(s.scaleDamageBySlots !== undefined ? { scaleDamageBySlots: Boolean(s.scaleDamageBySlots) } : {}),
       }));
 
+      if (importedAbilities.length === 0 && importedSpells.length === 0) {
+        return { success: false, count: 0, error: "No valid scars, feats, or spells found in payload." };
+      }
       setAbilities((prev) => [...prev, ...importedAbilities]);
       setNextAbilityId((n) => n + importedAbilities.length);
       setSpells((prev) => [...prev, ...importedSpells]);
       setNextSpellId((n) => n + importedSpells.length);
+      return { success: true, count: importedAbilities.length + importedSpells.length };
+    } catch {
+      return { success: false, count: 0, error: "Could not parse shared content JSON." };
+    }
+  };
+
+  const importSharedContentFromText = (text: string) => {
+    const result = importSharedContentFromPayload(text);
+    if (result.success) {
       setImportJsonText("");
       setImportJsonOpen(false);
       setImportSpellJsonText("");
       setImportSpellJsonOpen(false);
       setAdminOpen(false);
-    } catch {}
+    }
   };
 
   const importAbilitiesFromText = () => importSharedContentFromText(importJsonText);
   const importSpellsFromText = () => importSharedContentFromText(importSpellJsonText);
+
 
   const castSpell = (spell: Spell, slotCount: number) => {
     const minCost = Math.max(1, spell.slotCost ?? 1);
@@ -2777,6 +2830,16 @@ export default function App() {
       ).values(),
     ),
   ];
+
+  // A weapon occupying multiple slots (e.g. two-handed) must only render once, not once per slot.
+  const equippedWeaponSlotEntries: [EquipSlot, InventoryItem][] = [];
+  const seenEquippedWeaponIds = new Set<number>();
+  for (const [slotKey, wpn] of Object.entries(equipment) as [EquipSlot, InventoryItem | null][]) {
+    if (wpn && wpn.type === "weapon" && !seenEquippedWeaponIds.has(wpn.id)) {
+      seenEquippedWeaponIds.add(wpn.id);
+      equippedWeaponSlotEntries.push([slotKey, wpn]);
+    }
+  }
 
   const inputStyle = {
     background: "#161209",
@@ -3442,8 +3505,7 @@ export default function App() {
                     );
                   })}
 
-                {(Object.entries(equipment) as [EquipSlot, InventoryItem | null][])
-                  .filter(([, wpn]) => Boolean(wpn && wpn.type === "weapon"))
+                {equippedWeaponSlotEntries
                   .map(([slotKey, wpn], i) => {
                     if (!wpn || wpn.type !== "weapon") return null;
                     const hiddenEntryKey = `${slotKey}:${wpn.id}`;
@@ -4078,8 +4140,8 @@ export default function App() {
                   className="text-xs hover:opacity-70 transition-opacity" style={{ color: "#9a8a6a", fontFamily: "'Cinzel', serif", cursor: "pointer", background: "none", border: "none" }}>Clear</button>
               </div>
               <div ref={diceLogRef} className="flex flex-col gap-1.5 overflow-y-auto" style={{ maxHeight: 220, scrollbarWidth: "thin", scrollbarColor: "rgba(196,133,58,0.2) transparent" }}>
-                {log.map((entry) => {
-                  const isLatest = entry.id === latestLogId;
+                {log.map((entry, index) => {
+                  const isLatest = index === 0;
                   return (
                   <div key={entry.id} className="flex gap-2 text-sm leading-snug py-1 border-b"
                     style={{
@@ -4088,7 +4150,6 @@ export default function App() {
                       borderLeft: isLatest ? "2px solid #c4853a" : "2px solid transparent",
                       paddingLeft: 4,
                       borderRadius: 2,
-                      transition: "background 0.8s ease, border-color 0.8s ease",
                     }}>
                     <span className="shrink-0 select-none" style={{ color: "rgba(196,133,58,0.4)", fontFamily: "'JetBrains Mono', monospace", fontSize: 11, paddingTop: 2 }}>{String(entry.id).padStart(2, "0")}</span>
                     <span style={{ color: logColor[entry.type], fontFamily: "'Crimson Pro', serif", fontSize: 14 }}>{entry.text}</span>
@@ -4243,7 +4304,7 @@ export default function App() {
                         className="flex items-center gap-1 px-3 py-1 text-xs transition-all hover:opacity-90"
                         style={{ background: "rgba(196,133,58,0.1)", border: "1px solid rgba(196,133,58,0.3)", borderRadius: 4, color: "#c4853a", fontFamily: "'Cinzel', serif", cursor: "pointer" }}
                       >
-                        <Plus size={10} /> Item Lookup
+                        <Plus size={10} /> Content Lookup
                       </button>
                     </div>
 
@@ -4254,6 +4315,13 @@ export default function App() {
                           draggable
                           onDragStart={() => onItemDragStart(item)}
                           onClick={() => setSelectedItem(selectedItem?.id === item.id ? null : item)}
+                          onMouseDown={beginLongPress(() => copyItemLookupKey(item))}
+                          onMouseUp={cancelLongPress}
+                          onMouseLeave={cancelLongPress}
+                          onTouchStart={beginLongPress(() => copyItemLookupKey(item))}
+                          onTouchEnd={cancelLongPress}
+                          onTouchCancel={cancelLongPress}
+                          onClickCapture={handleCardClickCapture}
                           className="flex flex-col items-center justify-between cursor-grab select-none transition-all hover:opacity-90"
                           style={{
                             width: 76,
@@ -4323,6 +4391,11 @@ export default function App() {
                           ))}
                           {selectedItem.speedBonus !== undefined && selectedItem.speedBonus > 0 && (
                             <span className="text-xs" style={{ color: "#9a8a6a", fontFamily: "'JetBrains Mono', monospace" }}>Speed: +{selectedItem.speedBonus}</span>
+                          )}
+                          {selectedItem.maxCharges !== undefined && (
+                            <span className="text-xs" style={{ color: "#c4853a", fontFamily: "'JetBrains Mono', monospace" }}>
+                              Charges: {normalizeWeaponCharges(selectedItem).currentCharges}/{normalizeWeaponCharges(selectedItem).maxCharges}
+                            </span>
                           )}
                         </div>
                         {selectedItem.description && (
@@ -4560,6 +4633,7 @@ export default function App() {
                 ))}
             </div>
 
+            {SHOW_ITEMS_SUBSECTION && (
             <div className="mt-4 pt-4" style={{ borderTop: "1px solid rgba(196,133,58,0.12)" }}>
               <div className="flex items-center justify-between mb-3">
                 <span className="text-xs uppercase tracking-widest" style={{ color: "#9a8a6a", fontFamily: "'Cinzel', serif" }}>
@@ -4570,7 +4644,7 @@ export default function App() {
                   className="px-2.5 py-1 text-[10px] uppercase tracking-widest transition-all hover:opacity-90"
                   style={{ background: "rgba(196,133,58,0.12)", border: "1px solid rgba(196,133,58,0.3)", borderRadius: 4, color: "#c4853a", fontFamily: "'Cinzel', serif", cursor: "pointer" }}
                 >
-                  Item Lookup
+                  Content Lookup
                 </button>
               </div>
               <div className="flex flex-col gap-2">
@@ -4717,6 +4791,7 @@ export default function App() {
                 })}
               </div>
             </div>
+            )}
           </div>
         </div>
 
@@ -5579,24 +5654,24 @@ export default function App() {
         </div>
       )}
 
-      {/* Item Lookup Modal */}
+      {/* Content Lookup Modal */}
       {itemLookupOpen && (
         <div className="fixed inset-0 flex items-center justify-center z-50" style={{ background: "rgba(0,0,0,0.75)" }} onClick={() => { setItemLookupOpen(false); setItemLookupQuery(""); setItemLookupError(""); }}>
           <div className="p-7 flex flex-col gap-4 w-full max-w-md" style={{ background: "#0e0c08", border: "1px solid rgba(196,133,58,0.4)", borderRadius: 8 }} onClick={(e) => e.stopPropagation()}>
-            <div className="text-base font-bold" style={{ fontFamily: "'Cinzel', serif", color: "#c4853a" }}>Item Lookup</div>
+            <div className="text-base font-bold" style={{ fontFamily: "'Cinzel', serif", color: "#c4853a" }}>Content Lookup</div>
             <p className="text-sm" style={{ color: "#9a8a6a", fontFamily: "'Crimson Pro', serif" }}>
-              Type an item's exact name to add it from the shared item sheet.
+              Type an item, scar, or feat's exact name to add it from the shared content sheet.
             </p>
             <input
               autoFocus
               value={itemLookupQuery}
               onChange={(e) => setItemLookupQuery(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter") void submitItemLookup(); }}
-              placeholder="Item name..."
+              placeholder="Item, scar, or feat name..."
               style={inputStyle}
             />
             {itemLookupLoading && (
-              <span className="text-xs" style={{ color: "#9a8a6a", fontFamily: "'Crimson Pro', serif" }}>Loading item sheet…</span>
+              <span className="text-xs" style={{ color: "#9a8a6a", fontFamily: "'Crimson Pro', serif" }}>Loading content sheet…</span>
             )}
             {itemLookupError && (
               <span className="text-xs" style={{ color: "#e07a7a", fontFamily: "'Crimson Pro', serif" }}>{itemLookupError}</span>
