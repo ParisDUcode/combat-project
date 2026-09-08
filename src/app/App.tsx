@@ -4106,15 +4106,15 @@ export default function App() {
                               </span>
                             )}
                           </div>
-                          {spell.damageDie !== undefined && (
-                            <button
-                              onClick={() => castSpell(spell, selectedSpellSlot)}
-                              className="text-[10px] px-2 py-0.5 rounded transition-all hover:opacity-90 active:scale-95 font-semibold"
-                              style={{ background: "rgba(106,154,224,0.2)", border: "1px solid rgba(106,154,224,0.4)", color: "#6a9ae0", fontFamily: "'Cinzel', serif", cursor: "pointer" }}
-                            >
-                              Cast ({spell.damageStat ? `${spell.damageStat}d${spell.damageDie}` : `d${spell.damageDie}`})
-                            </button>
-                          )}
+                          <button
+                            onClick={() => castSpell(spell, selectedSpellSlot)}
+                            className="text-[10px] px-2 py-0.5 rounded transition-all hover:opacity-90 active:scale-95 font-semibold"
+                            style={{ background: "rgba(106,154,224,0.2)", border: "1px solid rgba(106,154,224,0.4)", color: "#6a9ae0", fontFamily: "'Cinzel', serif", cursor: "pointer" }}
+                          >
+                            {spell.damageDie !== undefined
+                              ? `Cast (${spell.damageStat ? `${spell.damageStat}d${spell.damageDie}` : `d${spell.damageDie}`})`
+                              : "Cast"}
+                          </button>
                           {spell.statModifiers && spell.statModifiers.length > 0 && (
                             <>
                               {spell.statModifiers.map((mod, i) => (
