@@ -606,7 +606,7 @@ export default function App() {
 
   const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null);
   const [inventoryPanelVisible, setInventoryPanelVisible] = useState(false);
-  const [statPopup, setStatPopup] = useState<StatKey | "AC" | "Initiative" | "Speed" | null>(null);
+  const [statPopup, setStatPopup] = useState<StatKey | "AC" | "Initiative" | "Speed" | "Omnivamp" | null>(null);
   const [adminOpen, setAdminOpen] = useState(false);
   const [dodgePopup, setDodgePopup] = useState<string | null>(null);
   const [hiddenEquipmentEntries, setHiddenEquipmentEntries] = useState<Record<string, boolean>>({});
@@ -2752,7 +2752,10 @@ export default function App() {
 
   // Red vampire-fangs badge for omnivamp; shown as a passive stat badge while omnivamp is active.
   const OmnivampBadge = () => (
-    <span className="inline-flex items-center gap-1 align-middle px-1.5 py-0.5 rounded" title={`Omnivamp ${omnivamp}% — heals you for ${omnivamp}% of ALL damage dealt (rounded up)`}
+    <span
+      className="inline-flex items-center gap-1 align-middle px-1.5 py-0.5 rounded cursor-pointer"
+      title={`Omnivamp ${omnivamp}% — heals you for ${omnivamp}% of ALL damage dealt (rounded up)`}
+      onClick={(e) => { e.stopPropagation(); setStatPopup((prev) => (prev === "Omnivamp" ? null : "Omnivamp")); }}
       style={{ background: "rgba(224,80,80,0.08)", border: "1px solid rgba(224,80,80,0.35)" }}>
       <svg width="11" height="11" viewBox="0 0 12 12" fill="none">
         <path d="M1 2 L4 2 L4 6.5 L3 10 L2 6.5 Z" fill="#e05050"/>
@@ -2948,180 +2951,194 @@ export default function App() {
           </div>
         )}
 
-        {/* Admin */}
-        <div className="relative inline-block mb-4" onClick={(e) => e.stopPropagation()}>
-          <button
-            onClick={() => setAdminOpen((o) => !o)}
-            className="px-3 py-1.5 text-xs transition-all hover:opacity-90"
-            style={{
-              fontFamily: "'Cinzel', serif",
-              color: adminOpen ? "#c4853a" : "#9a8a6a",
-              background: adminOpen ? "rgba(196,133,58,0.08)" : "#0e0c08",
-              border: `1px solid ${adminOpen ? "rgba(196,133,58,0.4)" : "rgba(196,133,58,0.15)"}`,
-              borderRadius: 4,
-              cursor: "pointer",
-              letterSpacing: "0.08em",
-            }}
-          >
-            Admin
-          </button>
-
-          {adminOpen && (
-            <div
-              className="absolute left-0 top-full mt-1 z-40 flex flex-col"
-              style={{ background: "#0e0c08", border: "1px solid rgba(196,133,58,0.3)", borderRadius: 6, minWidth: 220, padding: "8px 0" }}
-            >
-              <div className="px-4 py-2 mb-1" style={{ borderBottom: "1px solid rgba(196,133,58,0.1)" }}>
-                <span className="text-xs uppercase tracking-widest" style={{ color: "#6a5a3a", fontFamily: "'Cinzel', serif" }}>Items</span>
-              </div>
-              <button
-                onClick={() => { setFightMenuOpen(true); setAdminOpen(false); }}
-                className="text-left px-4 py-2.5 text-sm hover:opacity-80 transition-opacity"
-                style={{ fontFamily: "'Crimson Pro', serif", color: "#e2cfa0", background: "none", border: "none", cursor: "pointer" }}
-              >
-                Fight Menu
-              </button>
-              <button
-                onClick={() => {
-                  const lvl = typeof level === "number" ? level : 1;
-                  if (lvl > 1) { setLevel(lvl - 1); setXpDiamonds(0); }
-                  setAdminOpen(false);
-                }}
-                className="text-left px-4 py-2.5 text-sm hover:opacity-80 transition-opacity"
-                style={{ fontFamily: "'Crimson Pro', serif", color: "#f5c5c5", background: "none", border: "none", cursor: "pointer" }}
-              >
-                Revert Level
-              </button>
-              <div style={{ borderTop: "1px solid rgba(196,133,58,0.1)", margin: "4px 0" }} />
-              <button
-                onClick={downloadItemTemplate}
-                className="text-left px-4 py-2.5 text-sm hover:opacity-80 transition-opacity"
-                style={{ fontFamily: "'Crimson Pro', serif", color: "#e2cfa0", background: "none", border: "none", cursor: "pointer" }}
-              >
-                Copy Item Template
-              </button>
-              <button
-                onClick={() => { setItemImportText(""); setLoadItemOpen(true); setAdminOpen(false); }}
-                className="text-left px-4 py-2.5 text-sm hover:opacity-80 transition-opacity"
-                style={{ fontFamily: "'Crimson Pro', serif", color: "#e2cfa0", background: "none", border: "none", cursor: "pointer" }}
-              >
-                Paste Item JSON
-              </button>
-              <button
-                onClick={downloadMonsterTemplate}
-                className="text-left px-4 py-2.5 text-sm hover:opacity-80 transition-opacity"
-                style={{ fontFamily: "'Crimson Pro', serif", color: "#e2cfa0", background: "none", border: "none", cursor: "pointer" }}
-              >
-                Copy Monster Template
-              </button>
-              <div className="px-4 py-2 mt-1" style={{ borderTop: "1px solid rgba(196,133,58,0.08)" }}>
-                <span className="text-xs uppercase tracking-widest" style={{ color: "#6a5a3a", fontFamily: "'Cinzel', serif" }}>Scars, Feats & Spells</span>
-              </div>
-              <button
-                onClick={downloadSharedContentTemplate}
-                className="text-left px-4 py-2.5 text-sm hover:opacity-80 transition-opacity"
-                style={{ fontFamily: "'Crimson Pro', serif", color: "#e2cfa0", background: "none", border: "none", cursor: "pointer" }}
-              >
-                Copy Shared Content Template
-              </button>
-              <button
-                onClick={() => { setImportJsonText(""); setImportJsonOpen(true); setAdminOpen(false); }}
-                className="text-left px-4 py-2.5 text-sm hover:opacity-80 transition-opacity"
-                style={{ fontFamily: "'Crimson Pro', serif", color: "#e2cfa0", background: "none", border: "none", cursor: "pointer" }}
-              >
-                Paste Shared Content JSON
-              </button>
-            </div>
-          )}
-        </div>
-
         {/* Header */}
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex flex-col gap-2">
-            <div className="flex items-center gap-4">
-              <input
-                value={characterName}
-                onChange={(e) => setCharacterName(e.target.value)}
-                placeholder="Character Name"
-                className="bg-transparent border-b text-3xl md:text-4xl outline-none"
-                style={{ fontFamily: "'Cinzel', serif", color: "#e2cfa0", borderColor: "rgba(196,133,58,0.4)", letterSpacing: "0.05em", minWidth: 240 }}
-              />
-              <div className="flex items-center gap-1.5">
-                <span className="text-xs uppercase tracking-widest" style={{ color: "#9a8a6a", fontFamily: "'Cinzel', serif" }}>Lv</span>
+        <div className="flex items-start justify-between gap-3 mb-3 flex-wrap">
+          <div className="flex items-center gap-4 flex-wrap">
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center gap-4">
                 <input
-                  type="number" min={1} max={20} value={level} placeholder="—"
-                  onChange={(e) => { setLevel(e.target.value === "" ? "" : Math.min(20, Math.max(1, Number(e.target.value)))); setXpDiamonds(0); }}
-                  className="bg-transparent border-b outline-none text-3xl md:text-4xl"
-                  style={{ fontFamily: "'JetBrains Mono', monospace", color: "#c4853a", borderColor: "rgba(196,133,58,0.4)", width: 56, textAlign: "center", MozAppearance: "textfield", appearance: "none" } as React.CSSProperties}
+                  value={characterName}
+                  onChange={(e) => setCharacterName(e.target.value)}
+                  placeholder="Character Name"
+                  className="bg-transparent border-b text-3xl md:text-4xl outline-none"
+                  style={{ fontFamily: "'Cinzel', serif", color: "#e2cfa0", borderColor: "rgba(196,133,58,0.4)", letterSpacing: "0.05em", minWidth: 240 }}
                 />
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs uppercase tracking-widest" style={{ color: "#9a8a6a", fontFamily: "'Cinzel', serif" }}>Lv</span>
+                  <input
+                    type="number" min={1} max={20} value={level} placeholder="—"
+                    onChange={(e) => { setLevel(e.target.value === "" ? "" : Math.min(20, Math.max(1, Number(e.target.value)))); setXpDiamonds(0); }}
+                    className="bg-transparent border-b outline-none text-3xl md:text-4xl"
+                    style={{ fontFamily: "'JetBrains Mono', monospace", color: "#c4853a", borderColor: "rgba(196,133,58,0.4)", width: 56, textAlign: "center", MozAppearance: "textfield", appearance: "none" } as React.CSSProperties}
+                  />
+                </div>
+              </div>
+              <div>{/* XP diamonds */}
+                {(() => {
+                  const lvl = level === "" ? 0 : Number(level);
+                  if (lvl === 0 || lvl >= 20) return null;
+                  return (
+                    <div className="flex flex-wrap gap-1.5">
+                      {Array.from({ length: lvl }).map((_, i) => {
+                        const filled = i < xpDiamonds;
+                        return (
+                          <div
+                            key={i}
+                            onClick={() => {
+                              const next = i + 1 === xpDiamonds ? i : i + 1;
+                              setXpDiamonds(next);
+                              if (next >= lvl && lvl < 20) {
+                                setLevel(lvl + 1);
+                                setXpDiamonds(0);
+                              }
+                            }}
+                            className="cursor-pointer transition-all hover:scale-110"
+                            style={{
+                              width: 12, height: 12,
+                              transform: "rotate(45deg)",
+                              background: filled ? "#c4853a" : "transparent",
+                              border: "1.5px solid rgba(196,133,58,0.6)",
+                              boxShadow: filled ? "0 0 5px #c4853a88" : "none",
+                              flexShrink: 0,
+                            }}
+                          />
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
               </div>
             </div>
-            <div>{/* XP diamonds */}
-              {(() => {
-                const lvl = level === "" ? 0 : Number(level);
-                if (lvl === 0 || lvl >= 20) return null;
+
+            {/* Class badges */}
+            <div className="flex gap-2 flex-wrap">
+              {(Object.keys(CLASS_COLORS) as ClassName[]).map((cls) => {
+                const color = CLASS_COLORS[cls];
+                const active = selectedClass === cls;
                 return (
-                  <div className="flex flex-wrap gap-1.5">
-                    {Array.from({ length: lvl }).map((_, i) => {
-                      const filled = i < xpDiamonds;
-                      return (
-                        <div
-                          key={i}
-                          onClick={() => {
-                            const next = i + 1 === xpDiamonds ? i : i + 1;
-                            setXpDiamonds(next);
-                            if (next >= lvl && lvl < 20) {
-                              setLevel(lvl + 1);
-                              setXpDiamonds(0);
-                            }
-                          }}
-                          className="cursor-pointer transition-all hover:scale-110"
-                          style={{
-                            width: 12, height: 12,
-                            transform: "rotate(45deg)",
-                            background: filled ? "#c4853a" : "transparent",
-                            border: "1.5px solid rgba(196,133,58,0.6)",
-                            boxShadow: filled ? "0 0 5px #c4853a88" : "none",
-                            flexShrink: 0,
-                          }}
-                        />
-                      );
-                    })}
-                  </div>
+                  <button key={cls} onClick={() => setSelectedClass(cls)}
+                    className="px-4 py-2 transition-all hover:opacity-90 active:scale-95"
+                    style={{ background: active ? `${color}18` : "#0e0c08", border: `1px solid ${active ? color : "rgba(196,133,58,0.15)"}`, borderRadius: 5, cursor: "pointer" }}
+                  >
+                    <span className="text-sm font-bold" style={{ fontFamily: "'Cinzel', serif", color: active ? color : "#e2cfa0" }}>{cls}</span>
+                  </button>
                 );
-              })()}
+              })}
             </div>
           </div>
-          <button
-            onClick={() => setLongRestStep("confirm")}
-            className="text-xs px-3 py-1.5 hover:opacity-90 transition-opacity"
-            style={{ background: "#0e0c18", border: "1px solid rgba(106,90,200,0.35)", borderRadius: 4, color: "#9a8acc", fontFamily: "'Cinzel', serif", cursor: "pointer" }}
-          >
-            Long Rest
-          </button>
-        </div>
 
-        {/* Class selector */}
-        <div className="flex gap-2 mb-5 flex-wrap">
-          {(Object.keys(CLASS_COLORS) as ClassName[]).map((cls) => {
-            const color = CLASS_COLORS[cls];
-            const active = selectedClass === cls;
-            return (
-              <button key={cls} onClick={() => setSelectedClass(cls)}
-                className="px-5 py-2.5 transition-all hover:opacity-90 active:scale-95"
-                style={{ background: active ? `${color}18` : "#0e0c08", border: `1px solid ${active ? color : "rgba(196,133,58,0.15)"}`, borderRadius: 5, cursor: "pointer" }}
+          {/* Utility actions */}
+          <div className="flex items-center gap-2 flex-wrap" onClick={(e) => e.stopPropagation()}>
+            <input ref={fileInputRef} type="file" accept="application/json" style={{ display: "none" }} onChange={handleCharacterFile} />
+            <div className="relative inline-block">
+              <button
+                onClick={() => setAdminOpen((o) => !o)}
+                className="px-3 py-1.5 text-xs transition-all hover:opacity-90"
+                style={{
+                  fontFamily: "'Cinzel', serif",
+                  color: adminOpen ? "#c4853a" : "#9a8a6a",
+                  background: adminOpen ? "rgba(196,133,58,0.08)" : "#0e0c08",
+                  border: `1px solid ${adminOpen ? "rgba(196,133,58,0.4)" : "rgba(196,133,58,0.15)"}`,
+                  borderRadius: 4,
+                  cursor: "pointer",
+                  letterSpacing: "0.08em",
+                }}
               >
-                <span className="text-sm font-bold" style={{ fontFamily: "'Cinzel', serif", color: active ? color : "#e2cfa0" }}>{cls}</span>
+                Admin
               </button>
-            );
-          })}
+
+              {adminOpen && (
+                <div
+                  className="absolute right-0 top-full mt-1 z-40 flex flex-col"
+                  style={{ background: "#0e0c08", border: "1px solid rgba(196,133,58,0.3)", borderRadius: 6, minWidth: 220, padding: "8px 0" }}
+                >
+                  <div className="px-4 py-2 mb-1" style={{ borderBottom: "1px solid rgba(196,133,58,0.1)" }}>
+                    <span className="text-xs uppercase tracking-widest" style={{ color: "#6a5a3a", fontFamily: "'Cinzel', serif" }}>Items</span>
+                  </div>
+                  <button
+                    onClick={() => { setFightMenuOpen(true); setAdminOpen(false); }}
+                    className="text-left px-4 py-2.5 text-sm hover:opacity-80 transition-opacity"
+                    style={{ fontFamily: "'Crimson Pro', serif", color: "#e2cfa0", background: "none", border: "none", cursor: "pointer" }}
+                  >
+                    Fight Menu
+                  </button>
+                  <button
+                    onClick={() => {
+                      const lvl = typeof level === "number" ? level : 1;
+                      if (lvl > 1) { setLevel(lvl - 1); setXpDiamonds(0); }
+                      setAdminOpen(false);
+                    }}
+                    className="text-left px-4 py-2.5 text-sm hover:opacity-80 transition-opacity"
+                    style={{ fontFamily: "'Crimson Pro', serif", color: "#f5c5c5", background: "none", border: "none", cursor: "pointer" }}
+                  >
+                    Revert Level
+                  </button>
+                  <div style={{ borderTop: "1px solid rgba(196,133,58,0.1)", margin: "4px 0" }} />
+                  <button
+                    onClick={downloadItemTemplate}
+                    className="text-left px-4 py-2.5 text-sm hover:opacity-80 transition-opacity"
+                    style={{ fontFamily: "'Crimson Pro', serif", color: "#e2cfa0", background: "none", border: "none", cursor: "pointer" }}
+                  >
+                    Copy Item Template
+                  </button>
+                  <button
+                    onClick={() => { setItemImportText(""); setLoadItemOpen(true); setAdminOpen(false); }}
+                    className="text-left px-4 py-2.5 text-sm hover:opacity-80 transition-opacity"
+                    style={{ fontFamily: "'Crimson Pro', serif", color: "#e2cfa0", background: "none", border: "none", cursor: "pointer" }}
+                  >
+                    Paste Item JSON
+                  </button>
+                  <button
+                    onClick={downloadMonsterTemplate}
+                    className="text-left px-4 py-2.5 text-sm hover:opacity-80 transition-opacity"
+                    style={{ fontFamily: "'Crimson Pro', serif", color: "#e2cfa0", background: "none", border: "none", cursor: "pointer" }}
+                  >
+                    Copy Monster Template
+                  </button>
+                  <div className="px-4 py-2 mt-1" style={{ borderTop: "1px solid rgba(196,133,58,0.08)" }}>
+                    <span className="text-xs uppercase tracking-widest" style={{ color: "#6a5a3a", fontFamily: "'Cinzel', serif" }}>Scars, Feats & Spells</span>
+                  </div>
+                  <button
+                    onClick={downloadSharedContentTemplate}
+                    className="text-left px-4 py-2.5 text-sm hover:opacity-80 transition-opacity"
+                    style={{ fontFamily: "'Crimson Pro', serif", color: "#e2cfa0", background: "none", border: "none", cursor: "pointer" }}
+                  >
+                    Copy Shared Content Template
+                  </button>
+                  <button
+                    onClick={() => { setImportJsonText(""); setImportJsonOpen(true); setAdminOpen(false); }}
+                    className="text-left px-4 py-2.5 text-sm hover:opacity-80 transition-opacity"
+                    style={{ fontFamily: "'Crimson Pro', serif", color: "#e2cfa0", background: "none", border: "none", cursor: "pointer" }}
+                  >
+                    Paste Shared Content JSON
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <button onClick={openCharacterFilePicker} className="text-xs px-3 py-1.5 hover:opacity-90 transition-opacity"
+              style={{ background: "#0e0c08", border: "1px solid rgba(196,133,58,0.25)", borderRadius: 4, color: "#9a8a6a", fontFamily: "'Cinzel', serif", cursor: "pointer" }}>
+              Load Character
+            </button>
+            <button onClick={saveCharacter} className="text-xs px-3 py-1.5 hover:opacity-90 transition-opacity"
+              style={{ background: "linear-gradient(135deg, #1a1208, #241a0c)", border: "1px solid rgba(196,133,58,0.4)", borderRadius: 4, color: "#c4853a", fontFamily: "'Cinzel', serif", cursor: "pointer" }}>
+              Save Character
+            </button>
+            <button
+              onClick={() => setLongRestStep("confirm")}
+              className="text-xs px-3 py-1.5 hover:opacity-90 transition-opacity"
+              style={{ background: "#0e0c18", border: "1px solid rgba(106,90,200,0.35)", borderRadius: 4, color: "#9a8acc", fontFamily: "'Cinzel', serif", cursor: "pointer" }}
+            >
+              Long Rest
+            </button>
+          </div>
         </div>
 
         {/* Main grid */}
-        <div className="grid grid-cols-1 md:grid-cols-[260px_1fr] gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-[260px_1fr] xl:grid-cols-[260px_1fr_320px] gap-3 xl:h-[calc(100vh-140px)]">
 
           {/* LEFT: Portrait + Stats */}
-          <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-3 xl:overflow-y-auto" style={{ scrollbarWidth: "thin", scrollbarColor: "rgba(196,133,58,0.2) transparent" }}>
 
             {/* Portrait */}
             <div className="relative flex flex-col" style={{ border: "1px solid rgba(196,133,58,0.3)", background: "#0e0c08", borderRadius: 6, aspectRatio: "3/4", width: "75%", overflow: "hidden" }}>
@@ -3247,16 +3264,6 @@ export default function App() {
                   },
                   { key: "Initiative", icon: <Zap size={13} style={{ color: "#9a8a6a" }} />, val: initiative },
                   { key: "Speed",      icon: <Footprints size={14} style={{ color: "#9a8a6a" }} />, val: displaySpeed },
-                  ...(omnivamp > 0 ? [{
-                    key: "Omnivamp",
-                    icon: (
-                      <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-                        <path d="M7 1.5C7 1.5 2.5 6.4 2.5 9a4.5 4.5 0 0 0 9 0C11.5 6.4 7 1.5 7 1.5Z" stroke="#c46a6a" strokeWidth="1.4" fill="none"/>
-                      </svg>
-                    ),
-                    val: omnivamp,
-                    suffix: "%" as const,
-                  }] : []),
                 ] as { key: string; icon: React.ReactNode; val: number; suffix?: string }[]).map(({ key, icon, val, suffix }) => {
                   const active = statPopup === key;
                   return (
@@ -3320,8 +3327,8 @@ export default function App() {
             </div>
           </div>
 
-          {/* RIGHT: HP + Attacks + Log */}
-          <div className="flex flex-col gap-4">
+          {/* CENTER: HP + Attacks (Column 2, scrolls internally) */}
+          <div className="flex flex-col gap-3 xl:h-full xl:overflow-hidden">
 
             {/* HP */}
             <div style={panelStyle}>
@@ -3397,16 +3404,22 @@ export default function App() {
               </div>
             </div>
 
-            {/* Attacks + Class Abilities + Combat Tracker row */}
-            <div className="flex gap-4 items-start">
-            <div className="flex flex-col gap-4 flex-1 min-w-0">
+            {/* Attacks + Class Abilities + Spells (scrolls independently within Column 2) */}
+            <div className="flex flex-col gap-3 flex-1 min-w-0 xl:overflow-y-auto" style={{ scrollbarWidth: "thin", scrollbarColor: "rgba(196,133,58,0.2) transparent" }}>
 
             {/* Attacks */}
             <div style={panelStyle}>
-              <div className="text-xs uppercase tracking-widest mb-4 flex items-center gap-2" style={{ color: "#9a8a6a", fontFamily: "'Cinzel', serif" }}>
+              <div className="text-xs uppercase tracking-widest mb-2 flex items-center gap-2" style={{ color: "#9a8a6a", fontFamily: "'Cinzel', serif" }}>
                 <Sword size={12} style={{ color: "#c4853a" }} /> Attacks and Equipment Abilities
                 {omnivamp > 0 ? <OmnivampBadge /> : null}
               </div>
+              {statPopup === "Omnivamp" && SECONDARY_DESCRIPTIONS.Omnivamp && (
+                <div className="mb-3 px-3 py-2 rounded" style={{ background: "rgba(224,80,80,0.08)", border: "1px solid rgba(224,80,80,0.35)" }}>
+                  <p className="text-xs leading-relaxed" style={{ color: "#9a8a6a", fontFamily: "'Crimson Pro', serif", fontSize: 13 }}>
+                    {SECONDARY_DESCRIPTIONS.Omnivamp}
+                  </p>
+                </div>
+              )}
               <div className="flex flex-col gap-2">
                 <button onClick={doBasicAttack} className="group relative w-full py-4 px-6 text-left transition-all hover:opacity-90 active:scale-95"
                   style={{ background: "linear-gradient(135deg, #1a1208, #241a0c)", border: "1px solid rgba(196,133,58,0.35)", borderRadius: 5, cursor: "pointer" }}>
@@ -4093,138 +4106,63 @@ export default function App() {
               </div>
             )}
 
-            </div>{/* end left sub-column */}
+            </div>{/* end scrollable attacks/abilities/spells wrapper */}
+
+          </div>{/* end Column 2 (Center: Combat Actions) */}
+
+          {/* RIGHT: Economy & Utilities (Column 3, scrolls internally) */}
+          <div className="flex flex-col gap-3 xl:h-full xl:overflow-y-auto" style={{ scrollbarWidth: "thin", scrollbarColor: "rgba(196,133,58,0.2) transparent" }}>
 
             {/* Combat Tracker */}
-            <div style={{ ...panelStyle, width: 110, flexShrink: 0 }}>
-              <div className="flex flex-col items-center gap-2 mb-5">
-                <span className="text-xs" style={{ color: "#6aaa6a", fontFamily: "'Cinzel', serif" }}>Actions</span>
-                <div className="flex flex-col gap-1.5">
-                  {Array.from({ length: fighterActionCount }).map((_, index) => (
-                    <div
-                      key={index}
-                      onClick={() => setActionUsedSlots((prev) => prev.map((used, i) => (i === index ? !used : used)))}
-                      className="cursor-pointer transition-all hover:opacity-80"
-                      style={{
-                        width: 36, height: 36,
-                        borderRadius: 4,
-                        background: actionUsedSlots[index] ? "#6aaa6a" : "transparent",
-                        border: "2px solid #6aaa6a",
-                        boxShadow: actionUsedSlots[index] ? "0 0 10px #6aaa6a55" : "none",
-                      }}
-                    />
-                  ))}
-                </div>
-              </div>
-
-              {/* Bonus action — orange triangle */}
-              <div className="flex flex-col items-center gap-1.5 mb-6">
-                <span className="text-xs" style={{ color: "#c4853a", fontFamily: "'Cinzel', serif" }}>Bonus</span>
-                <svg width="38" height="34" viewBox="0 0 38 34" className="cursor-pointer hover:opacity-80 transition-all" onClick={() => setBonusActionUsed((v) => !v)}>
-                  <polygon
-                    points="19,2 36,32 2,32"
-                    fill={bonusActionUsed ? "#c4853a" : "transparent"}
-                    stroke="#c4853a"
-                    strokeWidth="2"
-                    style={{ filter: bonusActionUsed ? "drop-shadow(0 0 5px #c4853a88)" : "none" }}
-                  />
-                </svg>
-              </div>
-
-              <button
-                onClick={() => { setActionUsedSlots(Array.from({ length: fighterActionCount }, () => false)); setBonusActionUsed(false); setFighterDashActive(false); setFighterDashUsedThisTurn(false); }}
-                className="w-full py-1.5 text-xs hover:opacity-80 transition-opacity"
-                style={{ background: "rgba(196,133,58,0.08)", border: "1px solid rgba(196,133,58,0.2)", borderRadius: 4, color: "#9a8a6a", fontFamily: "'Cinzel', serif", cursor: "pointer" }}
-              >
-                New Turn
-              </button>
-            </div>
-
-            </div>{/* end row */}
-
-            {/* Combat Log */}
-            <div style={{ ...panelStyle, background: "#0a0906", flex: 1 }}>
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-xs uppercase tracking-widest flex items-center gap-2" style={{ color: "#9a8a6a", fontFamily: "'Cinzel', serif" }}>
-                  <Scroll size={12} style={{ color: "#c4853a" }} /> Dice Log
-                </span>
-                <button onClick={clearDiceLog}
-                  className="text-xs hover:opacity-70 transition-opacity" style={{ color: "#9a8a6a", fontFamily: "'Cinzel', serif", cursor: "pointer", background: "none", border: "none" }}>Clear</button>
-              </div>
-              <div ref={diceLogRef} className="flex flex-col gap-1.5 overflow-y-auto" style={{ maxHeight: 220, scrollbarWidth: "thin", scrollbarColor: "rgba(196,133,58,0.2) transparent" }}>
-                {log.map((entry, index) => {
-                  const isLatest = index === 0;
-                  return (
-                  <div key={entry.id} className="flex gap-2 text-sm leading-snug py-1 border-b"
-                    style={{
-                      borderColor: "rgba(196,133,58,0.06)",
-                      background: isLatest ? "rgba(196,133,58,0.14)" : "transparent",
-                      borderLeft: isLatest ? "2px solid #c4853a" : "2px solid transparent",
-                      paddingLeft: 4,
-                      borderRadius: 2,
-                    }}>
-                    <span className="shrink-0 select-none" style={{ color: "rgba(196,133,58,0.4)", fontFamily: "'JetBrains Mono', monospace", fontSize: 11, paddingTop: 2 }}>{String(entry.id).padStart(2, "0")}</span>
-                    <span style={{ color: logColor[entry.type], fontFamily: "'Crimson Pro', serif", fontSize: 14 }}>{entry.text}</span>
+            <div style={panelStyle}>
+              <div className="flex items-center gap-6 flex-wrap">
+                <div className="flex flex-col items-center gap-2">
+                  <span className="text-xs" style={{ color: "#6aaa6a", fontFamily: "'Cinzel', serif" }}>Actions</span>
+                  <div className="flex gap-1.5">
+                    {Array.from({ length: fighterActionCount }).map((_, index) => (
+                      <div
+                        key={index}
+                        onClick={() => setActionUsedSlots((prev) => prev.map((used, i) => (i === index ? !used : used)))}
+                        className="cursor-pointer transition-all hover:opacity-80"
+                        style={{
+                          width: 32, height: 32,
+                          borderRadius: 4,
+                          background: actionUsedSlots[index] ? "#6aaa6a" : "transparent",
+                          border: "2px solid #6aaa6a",
+                          boxShadow: actionUsedSlots[index] ? "0 0 10px #6aaa6a55" : "none",
+                        }}
+                      />
+                    ))}
                   </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Journal */}
-            <div style={{ ...panelStyle, background: "#0a0906" }}>
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-xs uppercase tracking-widest flex items-center gap-2" style={{ color: "#9a8a6a", fontFamily: "'Cinzel', serif" }}>
-                  <Scroll size={12} style={{ color: "#c4853a" }} /> Entry {currentJournalIndex + 1}
-                </span>
-                <div className="flex items-center gap-1">
-                  <button
-                    onClick={goToPreviousJournalEntry}
-                    disabled={currentJournalIndex === 0}
-                    className="px-2 py-1 text-xs transition-opacity"
-                    style={{
-                      color: currentJournalIndex === 0 ? "#4a3a22" : "#9a8a6a",
-                      fontFamily: "'Cinzel', serif",
-                      cursor: currentJournalIndex === 0 ? "default" : "pointer",
-                      background: "none",
-                      border: "1px solid rgba(196,133,58,0.2)",
-                      borderRadius: 4,
-                    }}
-                  >
-                    ←
-                  </button>
-                  <button
-                    onClick={goToNextJournalEntry}
-                    className="px-2 py-1 text-xs transition-opacity hover:opacity-80"
-                    style={{
-                      color: "#9a8a6a",
-                      fontFamily: "'Cinzel', serif",
-                      cursor: "pointer",
-                      background: "none",
-                      border: "1px solid rgba(196,133,58,0.2)",
-                      borderRadius: 4,
-                    }}
-                  >
-                    →
-                  </button>
                 </div>
-              </div>
-              <textarea
-                value={journalEntries[currentJournalIndex]?.text ?? ""}
-                onChange={(e) => updateCurrentJournalEntry(e.target.value)}
-                placeholder="Write your journal entry..."
-                rows={6}
-                style={{ ...inputStyle, minHeight: 140, resize: "vertical" as const }}
-              />
-            </div>
-          </div>
-        </div>
 
-        {/* ── INVENTORY ────────────────────────────────────────────────────── */}
-        <div className="mt-4 grid grid-cols-1 xl:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)] gap-4">
-          {inventoryPanelVisible ? (
-            <>
-              <div style={panelStyle}>
+                {/* Bonus action — orange triangle */}
+                <div className="flex flex-col items-center gap-1.5">
+                  <span className="text-xs" style={{ color: "#c4853a", fontFamily: "'Cinzel', serif" }}>Bonus</span>
+                  <svg width="34" height="30" viewBox="0 0 38 34" className="cursor-pointer hover:opacity-80 transition-all" onClick={() => setBonusActionUsed((v) => !v)}>
+                    <polygon
+                      points="19,2 36,32 2,32"
+                      fill={bonusActionUsed ? "#c4853a" : "transparent"}
+                      stroke="#c4853a"
+                      strokeWidth="2"
+                      style={{ filter: bonusActionUsed ? "drop-shadow(0 0 5px #c4853a88)" : "none" }}
+                    />
+                  </svg>
+                </div>
+
+                <button
+                  onClick={() => { setActionUsedSlots(Array.from({ length: fighterActionCount }, () => false)); setBonusActionUsed(false); setFighterDashActive(false); setFighterDashUsedThisTurn(false); }}
+                  className="py-1.5 px-3 text-xs hover:opacity-80 transition-opacity"
+                  style={{ background: "rgba(196,133,58,0.08)", border: "1px solid rgba(196,133,58,0.2)", borderRadius: 4, color: "#9a8a6a", fontFamily: "'Cinzel', serif", cursor: "pointer" }}
+                >
+                  New Turn
+                </button>
+              </div>
+            </div>
+
+          {inventoryPanelVisible && (
+            <div className="fixed inset-0 flex items-center justify-center z-50" style={{ background: "rgba(0,0,0,0.75)" }} onClick={() => setInventoryPanelVisible(false)}>
+              <div style={{ ...panelStyle, maxWidth: 720, width: "100%", maxHeight: "85vh", overflowY: "auto" }} onClick={(e) => e.stopPropagation()}>
                 <div className="flex items-center justify-between mb-4">
                   <div className="text-xs uppercase tracking-widest flex items-center gap-2" style={{ color: "#9a8a6a", fontFamily: "'Cinzel', serif" }}>
                     <Package size={12} style={{ color: "#c4853a" }} /> Inventory
@@ -4448,8 +4386,10 @@ export default function App() {
                   </div>
                 </div>
               </div>
-            </>
-          ) : (
+            </div>
+          )}
+
+            {/* Inventory summary (always visible; "Open" launches the full equipment/bag modal above) */}
             <div style={panelStyle}>
               <div className="flex items-center justify-between">
                 <div className="text-xs uppercase tracking-widest flex items-center gap-2" style={{ color: "#9a8a6a", fontFamily: "'Cinzel', serif" }}>
@@ -4482,19 +4422,18 @@ export default function App() {
                 </div>
               </div>
             </div>
-          )}
 
-          <div style={{ ...panelStyle, alignSelf: "start" }}>
+          <div style={panelStyle}>
             <div className="flex items-center justify-between mb-4">
               <span className="text-xs uppercase tracking-widest" style={{ color: "#9a8a6a", fontFamily: "'Cinzel', serif" }}>
                 Scars & Feats
               </span>
               <button
-                onClick={() => { setImportJsonText(""); setImportJsonOpen(true); }}
+                onClick={() => setItemLookupOpen(true)}
                 className="px-2.5 py-1 text-[10px] uppercase tracking-widest transition-all hover:opacity-90"
                 style={{ background: "rgba(196,133,58,0.12)", border: "1px solid rgba(196,133,58,0.3)", borderRadius: 4, color: "#c4853a", fontFamily: "'Cinzel', serif", cursor: "pointer" }}
               >
-                Paste JSON
+                Content Lookup
               </button>
             </div>
             <div className="flex flex-col gap-3">
@@ -4805,20 +4744,56 @@ export default function App() {
             </div>
             )}
           </div>
-        </div>
 
-      {/* Save / Load */}
-      <div className="flex justify-end gap-2 mt-4 px-4 md:px-6 pb-6">
-        <input ref={fileInputRef} type="file" accept="application/json" style={{ display: "none" }} onChange={handleCharacterFile} />
-        <button onClick={openCharacterFilePicker} className="flex items-center gap-2 px-4 py-2 text-sm transition-all hover:opacity-90 active:scale-95"
-          style={{ background: "#0e0c08", border: "1px solid rgba(196,133,58,0.25)", borderRadius: 5, color: "#9a8a6a", fontFamily: "'Cinzel', serif", cursor: "pointer" }}>
-          Load Character
-        </button>
-        <button onClick={saveCharacter} className="flex items-center gap-2 px-4 py-2 text-sm transition-all hover:opacity-90 active:scale-95"
-          style={{ background: "linear-gradient(135deg, #1a1208, #241a0c)", border: "1px solid rgba(196,133,58,0.4)", borderRadius: 5, color: "#c4853a", fontFamily: "'Cinzel', serif", cursor: "pointer" }}>
-          Save Character
-        </button>
-      </div>
+            {/* Journal */}
+            <div style={{ ...panelStyle, background: "#0a0906" }}>
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-xs uppercase tracking-widest flex items-center gap-2" style={{ color: "#9a8a6a", fontFamily: "'Cinzel', serif" }}>
+                  <Scroll size={12} style={{ color: "#c4853a" }} /> Entry {currentJournalIndex + 1}
+                </span>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={goToPreviousJournalEntry}
+                    disabled={currentJournalIndex === 0}
+                    className="px-2 py-1 text-xs transition-opacity"
+                    style={{
+                      color: currentJournalIndex === 0 ? "#4a3a22" : "#9a8a6a",
+                      fontFamily: "'Cinzel', serif",
+                      cursor: currentJournalIndex === 0 ? "default" : "pointer",
+                      background: "none",
+                      border: "1px solid rgba(196,133,58,0.2)",
+                      borderRadius: 4,
+                    }}
+                  >
+                    ←
+                  </button>
+                  <button
+                    onClick={goToNextJournalEntry}
+                    className="px-2 py-1 text-xs transition-opacity hover:opacity-80"
+                    style={{
+                      color: "#9a8a6a",
+                      fontFamily: "'Cinzel', serif",
+                      cursor: "pointer",
+                      background: "none",
+                      border: "1px solid rgba(196,133,58,0.2)",
+                      borderRadius: 4,
+                    }}
+                  >
+                    →
+                  </button>
+                </div>
+              </div>
+              <textarea
+                value={journalEntries[currentJournalIndex]?.text ?? ""}
+                onChange={(e) => updateCurrentJournalEntry(e.target.value)}
+                placeholder="Write your journal entry..."
+                rows={6}
+                style={{ ...inputStyle, minHeight: 140, resize: "vertical" as const }}
+              />
+            </div>
+
+          </div>{/* end Column 3 */}
+        </div>{/* end Main grid */}
 
       {/* ── FIGHT MENU MODAL ──────────────────────────────────────────────── */}
       {fightMenuOpen && (
@@ -5756,6 +5731,35 @@ export default function App() {
           </div>
         </div>
       )}
+
+      {/* Dice Log — pinned overlay, independent of page scroll/columns */}
+      <div className="dice-log-floating flex flex-col" style={{ position: "fixed", bottom: 16, right: 16, width: 320, maxHeight: 200, zIndex: 50, background: "rgba(18,14,10,0.95)", border: "1px solid #5c4033", borderRadius: 6, padding: 12 }}>
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-xs uppercase tracking-widest flex items-center gap-2" style={{ color: "#9a8a6a", fontFamily: "'Cinzel', serif" }}>
+            <Scroll size={12} style={{ color: "#c4853a" }} /> Dice Log
+          </span>
+          <button onClick={clearDiceLog}
+            className="text-xs hover:opacity-70 transition-opacity" style={{ color: "#9a8a6a", fontFamily: "'Cinzel', serif", cursor: "pointer", background: "none", border: "none" }}>Clear</button>
+        </div>
+        <div ref={diceLogRef} className="flex flex-col gap-1.5 overflow-y-auto" style={{ maxHeight: 150, scrollbarWidth: "thin", scrollbarColor: "rgba(196,133,58,0.2) transparent" }}>
+          {log.map((entry, index) => {
+            const isLatest = index === 0;
+            return (
+            <div key={entry.id} className="flex gap-2 text-sm leading-snug py-1 border-b"
+              style={{
+                borderColor: "rgba(196,133,58,0.06)",
+                background: isLatest ? "rgba(196,133,58,0.14)" : "transparent",
+                borderLeft: isLatest ? "2px solid #c4853a" : "2px solid transparent",
+                paddingLeft: 4,
+                borderRadius: 2,
+              }}>
+              <span className="shrink-0 select-none" style={{ color: "rgba(196,133,58,0.4)", fontFamily: "'JetBrains Mono', monospace", fontSize: 11, paddingTop: 2 }}>{String(entry.id).padStart(2, "0")}</span>
+              <span style={{ color: logColor[entry.type], fontFamily: "'Crimson Pro', serif", fontSize: 14 }}>{entry.text}</span>
+            </div>
+            );
+          })}
+        </div>
+      </div>
 
       <div className="w-full h-1" style={{ background: "linear-gradient(90deg, transparent, #c4853a 30%, #8b1c1c 50%, #c4853a 70%, transparent)" }} />
     </div>

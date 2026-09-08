@@ -190,3 +190,11 @@ input[type=number]::-webkit-outer-spin-button {
     line-height: 1.5;
   }
 }
+
+/* Desktop-only single-screen lock for the character sheet; smaller viewports keep normal page scrolling. */
+@media (min-width: 1280px) {
+  html, body, #root {
+    height: 100vh;
+    overflow: hidden;
+  }
+}
