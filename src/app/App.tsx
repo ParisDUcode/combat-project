@@ -75,6 +75,11 @@ interface Ability {
 const isPassiveAbility = (ability: Ability | null | undefined): boolean =>
   !ability?.actions || ability.actions.length === 0;
 
+// A "true" passive has no actions AND no numeric modifiers (e.g. Slow Falling) — stat-boost-only
+// abilities still apply their modifiers automatically but shouldn't clutter the Attacks panel.
+const isTruePassiveAbility = (ability: Ability | null | undefined): boolean =>
+  isPassiveAbility(ability) && (!ability?.modifiers || ability.modifiers.length === 0);
+
 interface Spell extends Ability {
   isSpell: true;
   damageDie?: number;
@@ -225,6 +230,13 @@ const hasWeaponAttackProfile = (item: InventoryItem | null | undefined): boolean
   (Array.isArray(item.attacks) && item.attacks.length > 0)
   || (typeof item.weaponFormula === "string" && item.weaponFormula.trim())
   || (item.die !== undefined && item.stat !== undefined)
+));
+// Stat-boost-only equipment (AC/MR/Speed/statBonus, no attacks) shouldn't clutter the Attacks panel as a "Passive" card.
+const hasPassiveStatBoost = (item: InventoryItem | null | undefined): boolean => Boolean(item && (
+  (item.acBonus ?? 0) > 0
+  || (item.magicResistBonus ?? 0) > 0
+  || (item.speedBonus ?? 0) > 0
+  || (item.statBonus && Object.values(item.statBonus).some((v) => (v ?? 0) !== 0))
 ));
 const hasChargeConsumingAttack = (item: InventoryItem | null | undefined): boolean => Boolean(
   item?.attacks?.some((attack) => attack.consumesCharge),
@@ -2278,6 +2290,12 @@ export default function App() {
       });
       return next;
     });
+    // Restore ability/feat tally charges the same way, unless marked Persistent.
+    setAbilities((prev) => prev.map((ability) => (
+      ability.tally && !/\bPersistent\b/i.test(ability.description ?? "")
+        ? { ...ability, tally: { ...ability.tally, used: 0 } }
+        : ability
+    )));
     setLongRestStep(null);
   };
 
@@ -3144,7 +3162,7 @@ export default function App() {
             {/* Portrait */}
             <div className="relative flex flex-col" style={{ border: "1px solid rgba(196,133,58,0.3)", background: "#0e0c08", borderRadius: 6, aspectRatio: "3/4", width: "75%", overflow: "hidden" }}>
               {portrait && (
-                <img src={portrait} alt="Character portrait" className="w-full h-full object-cover"
+                <img src={portrait} alt="Character portrait" className="w-full h-full object-contain"
                   style={{ display: portraitValid ? "block" : "none" }}
                   onLoad={() => { setPortraitValid(true); setPortraitError(""); }}
                   onError={() => { setPortraitValid(false); setPortraitError("Image failed to load. Try a direct image URL or upload a local file."); }}
@@ -3432,7 +3450,7 @@ export default function App() {
                   <div className="absolute bottom-0 left-0 right-0 h-0.5 opacity-0 group-hover:opacity-100 transition-opacity" style={{ background: "#c4853a" }} />
                 </button>
 
-                {abilities.filter(isPassiveAbility).filter((ability) => !ability.hidden).map((ability) => (
+                {abilities.filter(isTruePassiveAbility).filter((ability) => !ability.hidden).map((ability) => (
                   <div
                     key={`passive-${ability.id}`}
                     className="w-full py-3 px-4"
@@ -3542,6 +3560,8 @@ export default function App() {
                   const charges = normalizedWeapon.currentCharges ?? maxCharges ?? 0;
 
                   if (!hasAttackProfile) {
+                    // Stat-boost-only gear (AC/MR/Speed/statBonus) is applied automatically; skip the redundant "Passive" card.
+                    if (hasPassiveStatBoost(normalizedWeapon)) return null;
                     return (
                       <div key={i} style={{ background: "linear-gradient(135deg, #101008, #17130a)", border: "1px solid rgba(196,133,58,0.2)", borderRadius: 5, padding: "10px 14px" }}
                         onMouseDown={beginLongPress(() => setHidePrompt({ kind: "slot", key: hiddenEntryKey, label: normalizedWeapon.name }))}
@@ -4510,7 +4530,7 @@ export default function App() {
                         </div>
                       );
                     })()}
-                    {!isPassiveAbility(ability) && ability.modifiers && ability.modifiers.length > 0 && (
+                    {ability.modifiers && ability.modifiers.length > 0 && (
                       <div className="flex flex-wrap gap-1 px-3 pb-3">
                         {ability.modifiers.map((mod, i) => {
                           const rawVal = mod.value.trim().replace(/^\+/, "");
