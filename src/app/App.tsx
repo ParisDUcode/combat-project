@@ -49,6 +49,15 @@ interface AbilityAction {
   description?: string;
 }
 
+interface ThemeMode {
+  accentColor?: string;
+  backgroundColor?: string;
+  textColor?: string;
+  emoji?: string;
+  emojiSize?: "small" | "medium" | "large" | number;
+  overlayOpacity?: number;
+}
+
 interface Ability {
   id: number;
   name: string;
@@ -58,6 +67,7 @@ interface Ability {
   tallyFormula?: string; // e.g. "level", "floor(level/2)", "level + INT"
   modifiers?: AbilityModifier[];
   actions?: AbilityAction[];
+  themeMode?: ThemeMode;
   hidden?: boolean;
 }
 
@@ -84,6 +94,35 @@ const ABILITY_TYPE_COLORS: Record<AbilityType, string> = {
   Feat:    "#c4853a",
   Scar:    "#c43a3a",
   Ability: "#9a8acc",
+};
+
+const isSafeThemeColor = (value: unknown): value is string => {
+  if (typeof value !== "string") return false;
+  const color = value.trim();
+  return color.length <= 40 && (
+    /^#[0-9a-f]{3,8}$/i.test(color)
+    || /^(?:rgb|hsl)a?\([0-9.%\s,+-]+\)$/i.test(color)
+    || /^[a-z]+$/i.test(color)
+  );
+};
+
+const normalizeThemeMode = (value: unknown): ThemeMode | undefined => {
+  if (!value || typeof value !== "object") return undefined;
+  const raw = value as Record<string, unknown>;
+  const theme: ThemeMode = {};
+  if (isSafeThemeColor(raw.accentColor)) theme.accentColor = raw.accentColor.trim();
+  if (isSafeThemeColor(raw.backgroundColor)) theme.backgroundColor = raw.backgroundColor.trim();
+  if (isSafeThemeColor(raw.textColor)) theme.textColor = raw.textColor.trim();
+  if (typeof raw.emoji === "string" && raw.emoji.trim()) theme.emoji = raw.emoji.trim().slice(0, 8);
+  if (raw.emojiSize === "small" || raw.emojiSize === "medium" || raw.emojiSize === "large") {
+    theme.emojiSize = raw.emojiSize;
+  } else if (typeof raw.emojiSize === "number" && Number.isFinite(raw.emojiSize)) {
+    theme.emojiSize = Math.max(24, Math.min(240, Math.round(raw.emojiSize)));
+  }
+  if (typeof raw.overlayOpacity === "number" && Number.isFinite(raw.overlayOpacity)) {
+    theme.overlayOpacity = Math.max(0, Math.min(0.35, raw.overlayOpacity));
+  }
+  return Object.keys(theme).length > 0 ? theme : undefined;
 };
 
 const PLACEHOLDER_ABILITIES: Ability[] = [];
@@ -730,6 +769,7 @@ export default function App() {
 
     const normalizeLoadedAbility = (ability: Ability): Ability => ({
       ...ability,
+      ...(normalizeThemeMode(ability.themeMode) ? { themeMode: normalizeThemeMode(ability.themeMode) } : {}),
       ...(Array.isArray(ability.modifiers)
         ? {
             modifiers: ability.modifiers.map((modifier) => ({
@@ -2346,15 +2386,21 @@ export default function App() {
       "- For abilities, support tallyFormula, modifiers, and actions just like the existing ability importer.\n" +
       "- Ability modifiers can target regular stats (PHYS, CON, INT, SOC, plus common aliases like STR, DEX, WIS, CHA, SOCIAL) and derived traits (AC/Armor, MR/Magic Resist, Speed, Omnivamp %).\n" +
       "- Feat and ability modifiers for AC, MR, Speed, and Omnivamp now affect the character's actual derived combat values used by the sheet and damage mitigation logic. Omnivamp is character-wide and heals for that % of ALL damage dealt (rounded up).\n" +
+      "- Scars and Feats can optionally define themeMode. The last visible Scar or Feat with themeMode wins.\n" +
+      "- themeMode supports accentColor, backgroundColor, textColor, emoji, emojiSize (small|medium|large or a number), and overlayOpacity (0 to 0.35).\n" +
+      "- Theme colors accept hex, rgb/rgba, hsl/hsla, or named CSS colors. Invalid values fall back safely.\n" +
       "- For spells, support damageDie, damageStat, statModifiers, slotCost, slotCostMax, and scaleDamageBySlots.\n" +
       "- A spell can use just damageDie if you want a die-only effect with no extra stat bonus; damageStat is optional.\n" +
       "\nBehavior implemented by the app:\n" +
       "- Spells are stored as ability-like entries with isSpell: true so they can share the same data model.\n" +
       "- If slotCostMax is absent, the spell uses the fixed slotCost. If slotCostMax is present, the player can choose a value between slotCost and slotCostMax.\n" +
       "- Die-only spells still cast normally; when damageStat is absent, the roll is just the damage die result.\n" +
+      "- Theme Mode changes the page color treatment and displays the configured emoji prominently in the center with smaller repeated accents around the screen.\n" +
       "\nSTRICT MINIMAL VALID OUTPUTS:\n" +
       "- Minimal shared payload:\n" +
       "  {\"abilities\":[{\"name\":\"Veteran\",\"type\":\"Feat\",\"description\":\"...\"}],\"spells\":[{\"name\":\"Spark\",\"type\":\"Ability\",\"isSpell\":true,\"description\":\"Quick magical strike.\",\"damageDie\":4,\"damageStat\":\"INT\",\"slotCost\":2,\"scaleDamageBySlots\":true}]}\n" +
+      "- Minimal themed Scar:\n" +
+      "  {\"abilities\":[{\"name\":\"Frog-Touched\",\"type\":\"Scar\",\"description\":\"A profoundly amphibious curse.\",\"themeMode\":{\"accentColor\":\"#62b34f\",\"backgroundColor\":\"#102a16\",\"textColor\":\"#d9f5c8\",\"emoji\":\"🐸\",\"emojiSize\":\"large\",\"overlayOpacity\":0.12}}]}\n" +
       "- Die-only example: {\"spells\":[{\"name\":\"Burst\",\"type\":\"Ability\",\"isSpell\":true,\"description\":\"A simple blast.\",\"damageDie\":12,\"slotCost\":2,\"scaleDamageBySlots\":true}]}\n",
     template: {
       abilities: [
@@ -2362,6 +2408,19 @@ export default function App() {
           name: "Veteran Instinct",
           type: "Feat",
           description: "A passive edge that sharpens your battlefield awareness.",
+        },
+        {
+          name: "Frog-Touched",
+          type: "Scar",
+          description: "A profoundly amphibious curse.",
+          themeMode: {
+            accentColor: "#62b34f",
+            backgroundColor: "#102a16",
+            textColor: "#d9f5c8",
+            emoji: "🐸",
+            emojiSize: "large",
+            overlayOpacity: 0.12,
+          },
         },
         {
           name: "Ability Name",
@@ -2437,6 +2496,7 @@ export default function App() {
         name: a.name ?? "Unnamed",
         type: (["Feat", "Scar", "Ability"].includes(a.type) ? a.type : "Ability") as AbilityType,
         description: a.description ?? "",
+        ...(normalizeThemeMode(a.themeMode) ? { themeMode: normalizeThemeMode(a.themeMode) } : {}),
         ...(a.tallyFormula ? { tallyFormula: String(a.tallyFormula), tally: { total: 1, used: 0 } } : a.tally ? { tally: { total: Number(a.tally.total) || 1, used: 0 } } : {}),
         ...(Array.isArray(a.modifiers)
           ? {
@@ -2668,12 +2728,77 @@ export default function App() {
     cursor: "pointer",
   };
 
+  const activeTheme = abilities
+    .filter((ability) => !ability.hidden && (ability.type === "Scar" || ability.type === "Feat") && ability.themeMode)
+    .at(-1)?.themeMode;
+  const themeAccent = activeTheme?.accentColor ?? "#c4853a";
+  const themeBackground = activeTheme?.backgroundColor ?? "#0c0a08";
+  const themeText = activeTheme?.textColor ?? "#e2cfa0";
+  const themeEmoji = activeTheme?.emoji ?? "✨";
+  const themeEmojiSize = activeTheme?.emojiSize === "small"
+    ? 56
+    : activeTheme?.emojiSize === "medium"
+      ? 88
+      : activeTheme?.emojiSize === "large"
+        ? 132
+        : typeof activeTheme?.emojiSize === "number"
+          ? activeTheme.emojiSize
+          : 104;
+  const themeOverlayOpacity = activeTheme?.overlayOpacity ?? 0;
+  const themeRootStyle = {
+    fontFamily: "'Crimson Pro', Georgia, serif",
+    background: activeTheme
+      ? `radial-gradient(ellipse at 30% 10%, ${themeBackground} 0%, #0c0a08 70%)`
+      : "radial-gradient(ellipse at 30% 10%, #1a1208 0%, #0c0a08 60%)",
+    color: themeText,
+    "--theme-accent": themeAccent,
+    "--theme-text": themeText,
+  } as React.CSSProperties;
+
   return (
     <div
       className="min-h-screen w-full"
       onClick={() => setAdminOpen(false)}
-      style={{ fontFamily: "'Crimson Pro', Georgia, serif", background: "radial-gradient(ellipse at 30% 10%, #1a1208 0%, #0c0a08 60%)" }}
+      style={themeRootStyle}
     >
+      {activeTheme && (
+        <>
+          <div
+            aria-hidden="true"
+            style={{
+              position: "fixed",
+              inset: 0,
+              zIndex: 5,
+              pointerEvents: "none",
+              background: themeAccent,
+              opacity: themeOverlayOpacity,
+              mixBlendMode: "screen",
+            }}
+          />
+          <div
+            aria-label={`${themeEmoji} theme mode`}
+            style={{
+              position: "fixed",
+              inset: 0,
+              zIndex: 6,
+              pointerEvents: "none",
+              overflow: "hidden",
+            }}
+          >
+            <div style={{ position: "absolute", top: "42%", left: "50%", transform: "translate(-50%, -50%)", fontSize: themeEmojiSize, lineHeight: 1, filter: `drop-shadow(0 0 18px ${themeAccent})` }}>
+              {themeEmoji}
+            </div>
+            {["8% 18%", "86% 14%", "14% 74%", "82% 78%", "50% 12%", "52% 88%", "4% 48%", "94% 52%"].map((position, index) => {
+              const [left, top] = position.split(" ");
+              return (
+                <span key={index} style={{ position: "absolute", left, top, fontSize: 30 + (index % 3) * 10, opacity: 0.72, transform: `rotate(${index % 2 === 0 ? -12 : 12}deg)` }}>
+                  {themeEmoji}
+                </span>
+              );
+            })}
+          </div>
+        </>
+      )}
       <div className="w-full h-1" style={{ background: "linear-gradient(90deg, transparent, #c4853a 30%, #8b1c1c 50%, #c4853a 70%, transparent)" }} />
 
       <div className="max-w-5xl mx-auto p-4 md:p-6">
@@ -4232,6 +4357,11 @@ export default function App() {
                         <span className="text-xs px-2 py-0.5 rounded-full font-semibold" style={{ background: `${ABILITY_TYPE_COLORS[ability.type]}22`, color: ABILITY_TYPE_COLORS[ability.type], fontFamily: "'Cinzel', serif", border: `1px solid ${ABILITY_TYPE_COLORS[ability.type]}44`, fontSize: 10 }}>
                           {ability.type}
                         </span>
+                        {ability.themeMode && (
+                          <span className="text-xs px-1.5 py-0.5 rounded" title="Theme Mode" style={{ background: "rgba(106,170,106,0.12)", border: "1px solid rgba(106,170,106,0.3)", color: ability.themeMode.accentColor ?? "#6aaa6a", fontFamily: "'Cinzel', serif", fontSize: 10 }}>
+                            {ability.themeMode.emoji ?? "Theme"}
+                          </span>
+                        )}
                         <button onClick={() => setAbilities((prev) => prev.filter((a) => a.id !== ability.id))}
                           style={{ background: "none", border: "none", cursor: "pointer", color: "#3a2020", padding: 0, lineHeight: 1 }}>
                           <X size={11} />
