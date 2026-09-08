@@ -2352,6 +2352,8 @@ export default function App() {
       "- Armor and accessory slots are weapon-capable and act as extra weapon slots\n" +
       "- Weapons equipped in any slot can appear in the Attacks panel\n" +
       "- The Attacks panel de-duplicates by weapon id, so a multi-slot weapon's actions show once\n" +
+      "- An item with no attack profile (no attacks/weaponFormula/die+stat) only shows as a \"Passive\" card if it also has NO acBonus, magicResistBonus, speedBonus, or statBonus set\n" +
+      "- If a no-attack item has any of acBonus/magicResistBonus/speedBonus/statBonus, it is hidden from the Attacks panel entirely (the bonus still applies automatically) — give it an attack profile or a narrative-only passive if you want it to appear there\n" +
       "\nSINGLE-ATTACK DAMAGE MODE (no attacks array):\n" +
       "- Legacy fields: die, stat, damageBonus, extraDice, extraDie, extraDamage\n" +
       "- Formula field: weaponFormula (string)\n" +
@@ -2520,6 +2522,9 @@ export default function App() {
       "- If slotCostMax is absent, the spell uses the fixed slotCost. If slotCostMax is present, the player can choose a value between slotCost and slotCostMax.\n" +
       "- Die-only spells still cast normally; when damageStat is absent, the roll is just the damage die result.\n" +
       "- Theme Mode changes the page color treatment and displays the configured emoji prominently in a dedicated banner above the sheet, with smaller repeated accents that do not cover core controls.\n" +
+      "- An ability with no actions only shows as a \"Passive\" card in the Attacks panel if it also has NO modifiers — this keeps that panel from being cluttered by stat-boost-only entries\n" +
+      "- An ability with no actions but with modifiers (a stat-boost-only ability) still applies its modifiers automatically and still shows in the Scars & Feats list; it just does not get a redundant Attacks-panel card\n" +
+      "- Give an ability a narrative-only passive (no modifiers, e.g. Slow Falling) if you want it to appear as a Passive card in the Attacks panel\n" +
       "\nCONTENT LOOKUP SHEET ROWS (single Payload per Key — no wrapper needed):\n" +
       "- For a Content Lookup row that is only a scar/feat/ability, the Payload can be a single bare object: {\"name\":\"...\",\"type\":\"Feat\",\"description\":\"...\"}\n" +
       "- For a Content Lookup row that is only a spell, the Payload can be a single bare object with a spell-identifying field (isSpell, damageDie, damageStat, slotCost, slotCostMax, or scaleDamageBySlots): {\"name\":\"Spark\",\"type\":\"Ability\",\"isSpell\":true,\"damageDie\":4,\"damageStat\":\"INT\",\"slotCost\":2,\"scaleDamageBySlots\":true}\n" +
