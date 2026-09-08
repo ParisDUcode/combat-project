@@ -113,7 +113,7 @@ interface InventoryItem {
   extraDie?: number; // sides of extra dice
   // multi-attack + charges
   attacks?: WeaponAttack[];   // if present, overrides die/stat for attack logic
-  maxCharges?: number;        // max resource charges (shown as dots, restored on long rest)
+  maxCharges?: number;        // max resource charges (shown as dots, restored on long rest unless Persistent)
   currentCharges?: number;    // remaining charges
   sacrificeRewards?: SacrificeReward[];
 }
@@ -1151,6 +1151,9 @@ export default function App() {
     return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
   };
 
+    const isPersistentWeapon = (item: InventoryItem): boolean =>
+      /\bPersistent\b/i.test(item.description ?? "");
+
   const normalizeWeaponCharges = (item: InventoryItem): InventoryItem => {
     if (item.type !== "weapon") return item;
     const max = toChargeValue(item.maxCharges);
@@ -2114,10 +2117,12 @@ export default function App() {
     setWizardSpellSlots(Math.max(1, lvl + 1));
     setWizardCounterspellCharges(counterspellCharges);
     addLog("Long rest completed — HP fully restored, abilities refreshed.", "heal");
-    // restore weapon charges
+    // Restore ordinary weapon charges; Persistent weapons keep their current pool.
     const restoreCharges = (item: InventoryItem): InventoryItem => {
       const normalized = normalizeWeaponCharges(item);
-      return normalized.maxCharges ? { ...normalized, currentCharges: normalized.maxCharges } : normalized;
+      return normalized.maxCharges && !isPersistentWeapon(normalized)
+        ? { ...normalized, currentCharges: normalized.maxCharges }
+        : normalized;
     };
     setInventory((prev) => prev.map(restoreCharges));
     setEquipment((prev) => {
@@ -2205,7 +2210,9 @@ export default function App() {
       "- currentCharges (number): starting pool; defaults to maxCharges if omitted\n" +
       "- maxCharges is normalized to positive integer\n" +
       "- currentCharges is clamped to 0..maxCharges\n" +
-      "- Charges restore to maxCharges on long rest\n" +
+      "- Charges restore to maxCharges on long rest by default\n" +
+      "- If the description contains the standalone word \"Persistent\" (case-insensitive), charges survive long rest and keep their current value\n" +
+      "- Existing weapons without \"Persistent\" in their description continue to restore normally\n" +
       "- UI supports direct Cur/Max numeric editing, debounced typing, clamp hints, and +/- nudges\n" +
       "\nIMPORT SAFETY / BEST PRACTICES FOR MODELS:\n" +
       "- Always output uppercase stat keys\n" +
@@ -2221,7 +2228,9 @@ export default function App() {
       "- Minimal multi-attack formula:\n" +
       "  {\"name\":\"Twin Sigil\",\"type\":\"weapon\",\"icon\":\"✧\",\"attacks\":[{\"name\":\"Sigil Strike\",\"formula\":\"1d8 + INT\",\"description\":\"Focused arcane thrust.\"}]}\n" +
       "- Minimal charge-enabled multi-attack:\n" +
-      "  {\"name\":\"Charge Wand\",\"type\":\"weapon\",\"icon\":\"⬡\",\"maxCharges\":5,\"attacks\":[{\"name\":\"Bolt\",\"formula\":\"1d6 + INT\",\"consumesCharge\":true}]}\n",
+      "  {\"name\":\"Charge Wand\",\"type\":\"weapon\",\"icon\":\"⬡\",\"maxCharges\":5,\"attacks\":[{\"name\":\"Bolt\",\"formula\":\"1d6 + INT\",\"consumesCharge\":true}]}\n" +
+      "- Minimal Persistent charge-enabled weapon (survives long rest):\n" +
+      "  {\"name\":\"Persistent Charge Wand\",\"type\":\"weapon\",\"icon\":\"⬡\",\"maxCharges\":5,\"currentCharges\":2,\"attacks\":[{\"name\":\"Bolt\",\"formula\":\"1d6 + INT\",\"consumesCharge\":true}],\"description\":\"Persistent charges remain after a long rest.\"}\n",
     template: [
       {
         name: "Simple Sword (Formula)",
@@ -2279,6 +2288,18 @@ export default function App() {
           { name: "Buttstroke", die: 6, stat: "PHYS", damageBonus: 1, description: "Fallback melee strike that does not consume charge." },
         ],
         description: "High-capacity charge weapon showing large pools and mixed formula/legacy multi-attacks.",
+      },
+      {
+        name: "Persistent Relic Wand",
+        type: "weapon",
+        slot: "weapon2",
+        icon: "⬡",
+        maxCharges: 5,
+        currentCharges: 2,
+        attacks: [
+          { name: "Relic Bolt", formula: "1d6 + INT", consumesCharge: true, description: "Charges remain after a long rest." },
+        ],
+        description: "Persistent charges survive long rest and retain their current value.",
       },
     ],
   };
