@@ -18,6 +18,7 @@ import type {
 } from "./monsters/types";
 import { normalizeMonsterCollection } from "./monsters/types";
 import { collectAbilityDerivedModifierTotals, resolveAbilityModifierTarget } from "./abilityModifierTargets";
+import { fetchItemLookupMap } from "./services/itemLookupService";
 
 type StatKey = "PHYS" | "CON" | "INT" | "SOC";
 type ClassName = "Fighter" | "Wizard";
@@ -643,6 +644,11 @@ export default function App() {
   const combatAttackDrag = useRef<{ monsterId: string; attack: MonsterAttack } | null>(null);
   const [loadItemOpen, setLoadItemOpen] = useState(false);
   const [itemImportText, setItemImportText] = useState("");
+  const [itemLookupOpen, setItemLookupOpen] = useState(false);
+  const [itemLookupQuery, setItemLookupQuery] = useState("");
+  const [itemLookupError, setItemLookupError] = useState("");
+  const [itemLookupLoading, setItemLookupLoading] = useState(false);
+  const [itemLookupMap, setItemLookupMap] = useState<Map<string, string> | null>(null);
   const [itemForm, setItemForm] = useState<{
     name: string; type: ItemType; slot: EquipSlot | ""; die: number; stat: StatKey; damageBonus: number; acBonus: number; description: string;
   }>({ name: "", type: "weapon", slot: "", die: 8, stat: "PHYS", damageBonus: 0, acBonus: 0, description: "" });
@@ -1586,9 +1592,10 @@ export default function App() {
 
 
   // ─── Inventory ───────────────────────────────────────────────────────────
-  const importItemsFromText = () => {
+  // Shared by the admin paste-JSON modal and the Item Lookup search bar.
+  const importItemsFromPayload = (jsonText: string): { success: boolean; count: number; error?: string } => {
     try {
-      const data = JSON.parse(itemImportText);
+      const data = JSON.parse(jsonText);
       const itemsData = Array.isArray(data) ? data : [data];
       const importedItems = itemsData
         .filter((entry): entry is Record<string, any> => entry && typeof entry === "object")
@@ -1662,13 +1669,74 @@ export default function App() {
               } as InventoryItem;
         });
 
-      if (importedItems.length === 0) return;
+      if (importedItems.length === 0) return { success: false, count: 0, error: "No valid items found in payload." };
       setInventory((prev) => [...prev, ...importedItems]);
       setNextItemId((n) => n + importedItems.length);
+      return { success: true, count: importedItems.length };
+    } catch {
+      return { success: false, count: 0, error: "Could not parse item JSON." };
+    }
+  };
+
+  const importItemsFromText = () => {
+    const result = importItemsFromPayload(itemImportText);
+    if (result.success) {
       setItemImportText("");
       setLoadItemOpen(false);
-    } catch {}
+    }
   };
+
+  const refreshItemLookup = async () => {
+    setItemLookupLoading(true);
+    setItemLookupError("");
+    try {
+      const map = await fetchItemLookupMap();
+      setItemLookupMap(map);
+    } catch (err) {
+      setItemLookupError(err instanceof Error ? err.message : "Failed to load item sheet.");
+    } finally {
+      setItemLookupLoading(false);
+    }
+  };
+
+  const submitItemLookup = async () => {
+    const query = itemLookupQuery.trim();
+    if (!query) return;
+    let map = itemLookupMap;
+    if (!map) {
+      setItemLookupLoading(true);
+      setItemLookupError("");
+      try {
+        map = await fetchItemLookupMap();
+        setItemLookupMap(map);
+      } catch (err) {
+        setItemLookupError(err instanceof Error ? err.message : "Failed to load item sheet.");
+        setItemLookupLoading(false);
+        return;
+      }
+      setItemLookupLoading(false);
+    }
+    const normalizedQuery = query.toLowerCase();
+    const matchedKey = Array.from(map.keys()).find((key) => key.toLowerCase() === normalizedQuery);
+    if (!matchedKey) {
+      setItemLookupError(`No item found matching "${query}".`);
+      return;
+    }
+    const result = importItemsFromPayload(map.get(matchedKey)!);
+    if (result.success) {
+      setItemLookupQuery("");
+      setItemLookupError("");
+    } else {
+      setItemLookupError(result.error ?? `Invalid item data for "${matchedKey}".`);
+    }
+  };
+
+  useEffect(() => {
+    if (itemLookupOpen && !itemLookupMap && !itemLookupLoading) {
+      void refreshItemLookup();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [itemLookupOpen]);
 
   const isWeaponSlot = (slot: EquipSlot) =>
     slot === "weapon1"
@@ -2856,6 +2924,13 @@ export default function App() {
                 style={{ fontFamily: "'Crimson Pro', serif", color: "#e2cfa0", background: "none", border: "none", cursor: "pointer" }}
               >
                 Copy Item Template
+              </button>
+              <button
+                onClick={() => { setItemImportText(""); setLoadItemOpen(true); setAdminOpen(false); }}
+                className="text-left px-4 py-2.5 text-sm hover:opacity-80 transition-opacity"
+                style={{ fontFamily: "'Crimson Pro', serif", color: "#e2cfa0", background: "none", border: "none", cursor: "pointer" }}
+              >
+                Paste Item JSON
               </button>
               <button
                 onClick={downloadMonsterTemplate}
@@ -4164,11 +4239,11 @@ export default function App() {
                     <div className="flex items-center justify-between mb-3">
                       <span className="text-xs uppercase tracking-widest" style={{ color: "#9a8a6a", fontFamily: "'Cinzel', serif" }}>Bag</span>
                       <button
-                        onClick={() => setLoadItemOpen(true)}
+                        onClick={() => setItemLookupOpen(true)}
                         className="flex items-center gap-1 px-3 py-1 text-xs transition-all hover:opacity-90"
                         style={{ background: "rgba(196,133,58,0.1)", border: "1px solid rgba(196,133,58,0.3)", borderRadius: 4, color: "#c4853a", fontFamily: "'Cinzel', serif", cursor: "pointer" }}
                       >
-                        <Plus size={10} /> Paste JSON
+                        <Plus size={10} /> Item Lookup
                       </button>
                     </div>
 
@@ -4491,11 +4566,11 @@ export default function App() {
                   Items
                 </span>
                 <button
-                  onClick={() => setLoadItemOpen(true)}
+                  onClick={() => setItemLookupOpen(true)}
                   className="px-2.5 py-1 text-[10px] uppercase tracking-widest transition-all hover:opacity-90"
                   style={{ background: "rgba(196,133,58,0.12)", border: "1px solid rgba(196,133,58,0.3)", borderRadius: 4, color: "#c4853a", fontFamily: "'Cinzel', serif", cursor: "pointer" }}
                 >
-                  Paste Item JSON
+                  Item Lookup
                 </button>
               </div>
               <div className="flex flex-col gap-2">
@@ -5498,6 +5573,43 @@ export default function App() {
               </button>
               <button onClick={importItemsFromText} className="px-4 py-2 text-sm font-semibold" style={{ background: "linear-gradient(135deg, #1a1208, #241a0c)", border: "1px solid rgba(196,133,58,0.4)", borderRadius: 4, color: "#c4853a", fontFamily: "'Cinzel', serif", cursor: "pointer" }}>
                 Import
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Item Lookup Modal */}
+      {itemLookupOpen && (
+        <div className="fixed inset-0 flex items-center justify-center z-50" style={{ background: "rgba(0,0,0,0.75)" }} onClick={() => { setItemLookupOpen(false); setItemLookupQuery(""); setItemLookupError(""); }}>
+          <div className="p-7 flex flex-col gap-4 w-full max-w-md" style={{ background: "#0e0c08", border: "1px solid rgba(196,133,58,0.4)", borderRadius: 8 }} onClick={(e) => e.stopPropagation()}>
+            <div className="text-base font-bold" style={{ fontFamily: "'Cinzel', serif", color: "#c4853a" }}>Item Lookup</div>
+            <p className="text-sm" style={{ color: "#9a8a6a", fontFamily: "'Crimson Pro', serif" }}>
+              Type an item's exact name to add it from the shared item sheet.
+            </p>
+            <input
+              autoFocus
+              value={itemLookupQuery}
+              onChange={(e) => setItemLookupQuery(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") void submitItemLookup(); }}
+              placeholder="Item name..."
+              style={inputStyle}
+            />
+            {itemLookupLoading && (
+              <span className="text-xs" style={{ color: "#9a8a6a", fontFamily: "'Crimson Pro', serif" }}>Loading item sheet…</span>
+            )}
+            {itemLookupError && (
+              <span className="text-xs" style={{ color: "#e07a7a", fontFamily: "'Crimson Pro', serif" }}>{itemLookupError}</span>
+            )}
+            <div className="flex justify-end gap-2">
+              <button onClick={() => void refreshItemLookup()} className="px-4 py-2 text-sm" style={{ background: "#111008", border: "1px solid rgba(196,133,58,0.2)", borderRadius: 4, color: "#9a8a6a", fontFamily: "'Cinzel', serif", cursor: "pointer" }}>
+                Refresh
+              </button>
+              <button onClick={() => { setItemLookupOpen(false); setItemLookupQuery(""); setItemLookupError(""); }} className="px-4 py-2 text-sm" style={{ background: "#111008", border: "1px solid rgba(196,133,58,0.2)", borderRadius: 4, color: "#9a8a6a", fontFamily: "'Cinzel', serif", cursor: "pointer" }}>
+                Cancel
+              </button>
+              <button onClick={() => void submitItemLookup()} className="px-4 py-2 text-sm font-semibold" style={{ background: "linear-gradient(135deg, #1a1208, #241a0c)", border: "1px solid rgba(196,133,58,0.4)", borderRadius: 4, color: "#c4853a", fontFamily: "'Cinzel', serif", cursor: "pointer" }}>
+                Add Item
               </button>
             </div>
           </div>
