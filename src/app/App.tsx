@@ -2504,12 +2504,18 @@ export default function App() {
       "- If slotCostMax is absent, the spell uses the fixed slotCost. If slotCostMax is present, the player can choose a value between slotCost and slotCostMax.\n" +
       "- Die-only spells still cast normally; when damageStat is absent, the roll is just the damage die result.\n" +
       "- Theme Mode changes the page color treatment and displays the configured emoji prominently in a dedicated banner above the sheet, with smaller repeated accents that do not cover core controls.\n" +
+      "\nCONTENT LOOKUP SHEET ROWS (single Payload per Key — no wrapper needed):\n" +
+      "- For a Content Lookup row that is only a scar/feat/ability, the Payload can be a single bare object: {\"name\":\"...\",\"type\":\"Feat\",\"description\":\"...\"}\n" +
+      "- For a Content Lookup row that is only a spell, the Payload can be a single bare object with a spell-identifying field (isSpell, damageDie, damageStat, slotCost, slotCostMax, or scaleDamageBySlots): {\"name\":\"Spark\",\"type\":\"Ability\",\"isSpell\":true,\"damageDie\":4,\"damageStat\":\"INT\",\"slotCost\":2,\"scaleDamageBySlots\":true}\n" +
+      "- Prefer bare objects (not the {abilities:[...],spells:[...]} wrapper) for single-entry Content Lookup rows — a {\"spells\":[...]} wrapper with no abilities key correctly imports zero abilities, but a bare object is simpler and avoids wrapper mistakes entirely.\n" +
       "\nSTRICT MINIMAL VALID OUTPUTS:\n" +
       "- Minimal shared payload:\n" +
       "  {\"abilities\":[{\"name\":\"Veteran\",\"type\":\"Feat\",\"description\":\"...\"}],\"spells\":[{\"name\":\"Spark\",\"type\":\"Ability\",\"isSpell\":true,\"description\":\"Quick magical strike.\",\"damageDie\":4,\"damageStat\":\"INT\",\"slotCost\":2,\"scaleDamageBySlots\":true}]}\n" +
       "- Minimal themed Scar:\n" +
       "  {\"abilities\":[{\"name\":\"Frog-Touched\",\"type\":\"Scar\",\"description\":\"A profoundly amphibious curse.\",\"themeMode\":{\"accentColor\":\"#62b34f\",\"backgroundColor\":\"#102a16\",\"textColor\":\"#d9f5c8\",\"emoji\":\"🐸\",\"emojiSize\":\"large\",\"overlayOpacity\":0.12}}]}\n" +
-      "- Die-only example: {\"spells\":[{\"name\":\"Burst\",\"type\":\"Ability\",\"isSpell\":true,\"description\":\"A simple blast.\",\"damageDie\":12,\"slotCost\":2,\"scaleDamageBySlots\":true}]}\n",
+      "- Die-only example: {\"spells\":[{\"name\":\"Burst\",\"type\":\"Ability\",\"isSpell\":true,\"description\":\"A simple blast.\",\"damageDie\":12,\"slotCost\":2,\"scaleDamageBySlots\":true}]}\n" +
+      "- Minimal bare single spell (ideal for a Content Lookup row): {\"name\":\"Spark\",\"type\":\"Ability\",\"isSpell\":true,\"description\":\"Quick magical strike.\",\"damageDie\":4,\"damageStat\":\"INT\",\"slotCost\":2,\"scaleDamageBySlots\":true}\n" +
+      "- Minimal bare single feat (ideal for a Content Lookup row): {\"name\":\"Veteran Instinct\",\"type\":\"Feat\",\"description\":\"A passive edge that sharpens your battlefield awareness.\"}\n",
     template: {
       abilities: [
         {
@@ -2580,13 +2586,19 @@ export default function App() {
   const importSharedContentFromPayload = (text: string): { success: boolean; count: number; error?: string } => {
     try {
       const payload = JSON.parse(text);
+      // A recognized wrapper key (abilities/spells/template) means "no entries" is a valid outcome,
+      // not a signal to fall back to treating the whole payload as one stray ability.
+      const hasRecognizedWrapperKey = Array.isArray(payload?.abilities)
+        || Array.isArray(payload?.spells)
+        || Array.isArray(payload?.template?.abilities)
+        || Array.isArray(payload?.template?.spells);
       const abilityEntries = Array.isArray(payload?.abilities)
         ? payload.abilities
         : Array.isArray(payload)
           ? payload.filter((entry: any) => !isSpellLikeEntry(entry))
           : Array.isArray(payload?.template?.abilities)
             ? payload.template.abilities
-            : isSpellLikeEntry(payload)
+            : hasRecognizedWrapperKey || isSpellLikeEntry(payload)
               ? []
               : [payload];
       const spellEntries = Array.isArray(payload?.spells)
