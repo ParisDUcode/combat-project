@@ -1114,3 +1114,67 @@ export const highwayCaptain: MonsterDefinition = {
   passiveAbilities: [],
   tags: ["humanoid", "move-6", "mr-0"],
 };
+
+export const runeCarvedBrassAutomaton: MonsterDefinition = {
+  id: "rune-carved-brass-automaton",
+  name: "Rune-Carved Brass Automaton",
+  cr: "2",
+  stats: { PHYS: 3, CON: 5, INT: 0, SOC: 0 },
+  hp: 28,
+  ac: 3,
+  mr: 2,
+  speed: 4,
+  attacks: [
+    {
+      id: "rune-carved-brass-automaton-piston-slam",
+      name: "Piston Slam",
+      formula: { diceCount: 1, diceSides: 4, flatBonus: 3 },
+      damageType: "physical",
+      description: "Deals 1d4 + 3 physical damage.",
+    },
+  ],
+  activeAbilities: [],
+  passiveAbilities: [
+    {
+      id: "rune-carved-brass-automaton-anchor-frame",
+      name: "Anchor Frame",
+      trigger: "encounter_start",
+      description: "Immune to push and pull forced movement effects.",
+      effects: [],
+    },
+  ],
+  tags: ["construct", "move-4", "mr-2", "medium"],
+};
+
+export const flyingSpellTomeSwarm: MonsterDefinition = {
+  id: "flying-spell-tome-swarm",
+  name: "Flying Spell-Tome Swarm",
+  cr: "2",
+  stats: { PHYS: 1, CON: 1, INT: 4, SOC: 0 },
+  hp: 11,
+  ac: 2,
+  mr: 2,
+  speed: 8,
+  attacks: [
+    {
+      id: "flying-spell-tome-swarm-papercut-barrage",
+      name: "Papercut Barrage",
+      formula: { diceCount: 1, diceSides: 4, flatBonus: 4 },
+      damageType: "magic",
+      description: "Ranged attack dealing 1d4 + 4 magic damage.",
+    },
+  ],
+  activeAbilities: [
+    {
+      id: "flying-spell-tome-swarm-page-whirlwind",
+      name: "Page Whirlwind",
+      target: "none",
+      cooldownTurns: 2,
+      formula: { diceCount: 0, diceSides: 0, flatBonus: 0 },
+      description: "Teleports up to 4 spaces, dealing 2 flat magic damage to all adjacent enemies at the destination.",
+      effects: [],
+    },
+  ],
+  passiveAbilities: [],
+  tags: ["swarm", "move-8", "fly", "mr-2", "medium"],
+};

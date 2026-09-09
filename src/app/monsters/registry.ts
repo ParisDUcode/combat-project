@@ -15,6 +15,7 @@ import {
   direBoar,
   frostDrakeWhelp,
   frostHound,
+  flyingSpellTomeSwarm,
   glassSentry,
   gloomBat,
   harpyScreamer,
@@ -30,6 +31,7 @@ import {
   orderInitiate,
   rokuganVeteran,
   rogueMarksman,
+  runeCarvedBrassAutomaton,
   shadowAssassin,
   shadowBladeAssassin,
   shadowPanther,
@@ -90,6 +92,8 @@ const RAW_MONSTERS: MonsterDefinition[] = [
   frostDrakeWhelp,
   shadowAssassin,
   highwayCaptain,
+  runeCarvedBrassAutomaton,
+  flyingSpellTomeSwarm,
 ];
 
 export const BASE_MONSTER_REGISTRY = normalizeMonsterCollection(RAW_MONSTERS);
