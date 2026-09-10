@@ -3736,11 +3736,35 @@ export default function App() {
                               ? atk.formula
                               : `d${atk.die ?? "?"} + ${atk.stat ?? "?"}${atk.damageBonus ? ` +${atk.damageBonus}` : ""}`;
                             const passiveAttack = hasPassiveDescription(atk.description);
-                            const noCharges = !passiveAttack && atk.consumesCharge && maxCharges && charges <= 0;
+
+                            if (passiveAttack) {
+                              return (
+                                <div key={atkIdx} className="px-2 py-1"
+                                  style={{ background: "rgba(106,170,106,0.08)", border: "1px solid rgba(106,170,106,0.22)", borderRadius: 4 }}
+                                  onMouseDown={beginLongPress(() => setHidePrompt({ kind: "weapon-attack", key: `${normalizedWeapon.id}:${atkIdx}`, label: atk.name }))}
+                                  onMouseUp={cancelLongPress}
+                                  onMouseLeave={cancelLongPress}
+                                  onTouchStart={beginLongPress(() => setHidePrompt({ kind: "weapon-attack", key: `${normalizedWeapon.id}:${atkIdx}`, label: atk.name }))}
+                                  onTouchEnd={cancelLongPress}
+                                  onTouchCancel={cancelLongPress}
+                                  onClickCapture={handleCardClickCapture}
+                                >
+                                  <div className="flex items-center justify-between gap-2 mb-0.5">
+                                    <span className="text-xs font-semibold" style={{ fontFamily: "'Cinzel', serif", color: "#e2cfa0" }}>{atk.name}</span>
+                                    <span className="text-[10px] uppercase tracking-[0.2em]" style={{ color: "#6aaa6a", fontFamily: "'Cinzel', serif" }}>Passive</span>
+                                  </div>
+                                  {atk.description ? (
+                                    <div className="text-xs" style={{ color: "#9a8a6a", fontFamily: "'Crimson Pro', serif" }}>{atk.description}</div>
+                                  ) : null}
+                                </div>
+                              );
+                            }
+
+                            const noCharges = atk.consumesCharge && maxCharges && charges <= 0;
                             return (
-                              <button key={atkIdx} onClick={() => doWeaponAttack(normalizedWeapon, atkIdx)} disabled={!!noCharges || passiveAttack}
+                              <button key={atkIdx} onClick={() => doWeaponAttack(normalizedWeapon, atkIdx)} disabled={!!noCharges}
                                 className="w-full py-2 px-3 text-left transition-all hover:opacity-90 active:scale-95"
-                                style={{ background: noCharges || passiveAttack ? "#111008" : "rgba(196,133,58,0.1)", border: `1px solid ${noCharges || passiveAttack ? "rgba(196,133,58,0.1)" : "rgba(196,133,58,0.35)"}`, borderRadius: 4, cursor: noCharges || passiveAttack ? "default" : "pointer", opacity: noCharges || passiveAttack ? 0.65 : 1 }}
+                                style={{ background: noCharges ? "#111008" : "rgba(196,133,58,0.1)", border: `1px solid ${noCharges ? "rgba(196,133,58,0.1)" : "rgba(196,133,58,0.35)"}`, borderRadius: 4, cursor: noCharges ? "default" : "pointer", opacity: noCharges ? 0.45 : 1 }}
                                 onMouseDown={beginLongPress(() => setHidePrompt({ kind: "weapon-attack", key: `${normalizedWeapon.id}:${atkIdx}`, label: atk.name }))}
                                 onMouseUp={cancelLongPress}
                                 onMouseLeave={cancelLongPress}
