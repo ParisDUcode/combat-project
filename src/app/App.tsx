@@ -666,8 +666,7 @@ export default function App() {
   // ─── Combat action tracker ────────────────────────────────────────────────
   const [actionUsedSlots, setActionUsedSlots] = useState<boolean[]>([false]);
   const [bonusActionUsed, setBonusActionUsed] = useState(false);
-
-  // ─── Long rest ────────────────────────────────────────────────────────────
+   // ─── Long rest ────────────────────────────────────────────────────────────
   type LongRestStep = "confirm" | null;
   const [longRestStep, setLongRestStep] = useState<LongRestStep>(null);
   const [longRestRoll, setLongRestRoll] = useState(0);
@@ -3623,7 +3622,7 @@ export default function App() {
                             <span className="text-xs" style={{ fontFamily: "'JetBrains Mono', monospace", color: "#c4853a" }}>{charges}/{maxCharges}</span>
                           ) : null}
                         </div>
-                        {hasPassiveDescription(normalizedWeapon.description) ? (
+                        {hasPassiveDescription(normalizedWeapon.description) && !normalizedWeapon.attacks.some((atk) => hasPassiveDescription(atk.description)) ? (
                           <div className="mb-2 px-2 py-1" style={{ background: "rgba(106,170,106,0.08)", border: "1px solid rgba(106,170,106,0.22)", borderRadius: 4 }}>
                             <div className="text-[10px] uppercase tracking-[0.2em] mb-0.5" style={{ color: "#6aaa6a", fontFamily: "'Cinzel', serif" }}>Passive</div>
                             <div className="text-xs" style={{ color: "#9a8a6a", fontFamily: "'Crimson Pro', serif" }}>{normalizedWeapon.description}</div>
