@@ -3,6 +3,7 @@ import { normalizeMonsterCollection, normalizeMonsterDefinition } from "./types"
 import { akkiDemon } from "./definitions/akkiDemon";
 import { animatedArmor } from "./definitions/animatedArmor";
 import { animatronic } from "./definitions/animatronic";
+import { bylandPecker } from "./definitions/bylandPecker";
 import {
   absoluteArcanist,
   alphaWolf,
@@ -56,6 +57,7 @@ const RAW_MONSTERS: MonsterDefinition[] = [
   animatronic,
   lowTierGoon,
   flyingFireSpitter,
+  bylandPecker,
   boar,
   viper,
   caveBear,
