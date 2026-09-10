@@ -259,23 +259,44 @@ const usesWeaponLogic = (item: InventoryItem | null | undefined) => Boolean(item
   || item.omnivamp !== undefined
 ));
 
-// Lets descriptions flag an action as a bonus action without a dedicated data field.
-const getActionCost = (description?: string): "action" | "bonus" =>
-  description?.toLowerCase().includes("bonus action") ? "bonus" : "action";
+// Lets descriptions classify an entry without dedicated data fields.
+type ActionCost = "action" | "bonus" | "passive";
 
-const ActionCostBadge = ({ cost }: { cost: "action" | "bonus" }) => (
+const getActionCost = (description?: string): ActionCost => {
+  const normalized = description?.toLowerCase() ?? "";
+  if (/\bpassive\b/.test(normalized)) return "passive";
+  return normalized.includes("bonus action") ? "bonus" : "action";
+};
+
+const getExecutableActionCost = (description?: string): "action" | "bonus" => {
+  const cost = getActionCost(description);
+  return cost === "passive" ? "action" : cost;
+};
+
+const hasPassiveDescription = (description?: string): boolean => getActionCost(description) === "passive";
+
+const getItemBonusSummary = (item: InventoryItem): string[] => [
+  ...Object.entries(item.statBonus ?? {})
+    .filter(([, value]) => Number(value) !== 0)
+    .map(([stat, value]) => `${stat} ${Number(value) >= 0 ? "+" : ""}${value}`),
+  item.speedBonus ? `Speed ${item.speedBonus >= 0 ? "+" : ""}${item.speedBonus}` : "",
+  item.acBonus ? `AC ${item.acBonus >= 0 ? "+" : ""}${item.acBonus}` : "",
+  item.magicResistBonus ? `MR ${item.magicResistBonus >= 0 ? "+" : ""}${item.magicResistBonus}` : "",
+].filter(Boolean);
+
+const ActionCostBadge = ({ cost }: { cost: ActionCost }) => (
   <span
     className="text-[10px] uppercase tracking-[0.2em]"
     style={{
-      color: cost === "bonus" ? "#c4853a" : "#6a9ae0",
+      color: cost === "passive" ? "#6aaa6a" : cost === "bonus" ? "#c4853a" : "#6a9ae0",
       fontFamily: "'Cinzel', serif",
       display: "inline-flex",
       alignItems: "center",
       gap: 4,
     }}
   >
-    <span>{cost === "bonus" ? "▲" : "■"}</span>
-    <span>{cost === "bonus" ? "Bonus action" : "Action"}</span>
+    <span>{cost === "passive" ? "◆" : cost === "bonus" ? "▲" : "■"}</span>
+    <span>{cost === "passive" ? "Passive" : cost === "bonus" ? "Bonus action" : "Action"}</span>
   </span>
 );
 
@@ -2348,12 +2369,14 @@ export default function App() {
       "- sacrificeRewards (array): [{ name, amount?, description? }]\n" +
       "- Any item type (weapon, armor, accessory, consumable) can include statBonus, speedBonus, acBonus, and magicResistBonus\n" +
       "- Weapon-style fields are valid on any inventory item and are used whenever present\n" +
+      "- Put the standalone word \\\"Passive\\\" in an item or attack description to display it as Passive instead of an Action; recommended style: \\\"Passive: You may fly during your turn.\\\"\n" +
+      "- Passive is display-only narrative: it does not consume an action, bonus action, charge, or tally, and flight rules are not automated\n" +
       "\nEQUIP/ATTACK BEHAVIOR (CURRENT BUILD):\n" +
       "- Armor and accessory slots are weapon-capable and act as extra weapon slots\n" +
       "- Weapons equipped in any slot can appear in the Attacks panel\n" +
       "- The Attacks panel de-duplicates by weapon id, so a multi-slot weapon's actions show once\n" +
       "- An item with no attack profile (no attacks/weaponFormula/die+stat) only shows as a \"Passive\" card if it also has NO acBonus, magicResistBonus, speedBonus, or statBonus set\n" +
-      "- If a no-attack item has any of acBonus/magicResistBonus/speedBonus/statBonus, it is hidden from the Attacks panel entirely (the bonus still applies automatically) — give it an attack profile or a narrative-only passive if you want it to appear there\n" +
+      "- If a no-attack item has any of acBonus/magicResistBonus/speedBonus/statBonus, it is hidden from the Attacks panel unless its description contains the standalone word Passive (the bonuses still apply automatically)\n" +
       "\nSINGLE-ATTACK DAMAGE MODE (no attacks array):\n" +
       "- Legacy fields: die, stat, damageBonus, extraDice, extraDie, extraDamage\n" +
       "- Formula field: weaponFormula (string)\n" +
@@ -2874,7 +2897,7 @@ export default function App() {
   const equippedWeaponSlotEntries: [EquipSlot, InventoryItem][] = [];
   const seenEquippedWeaponIds = new Set<number>();
   for (const [slotKey, wpn] of Object.entries(equipment) as [EquipSlot, InventoryItem | null][]) {
-    if (wpn && wpn.type === "weapon" && !seenEquippedWeaponIds.has(wpn.id)) {
+    if (wpn && (wpn.type === "weapon" || hasPassiveDescription(wpn.description)) && !seenEquippedWeaponIds.has(wpn.id)) {
       seenEquippedWeaponIds.add(wpn.id);
       equippedWeaponSlotEntries.push([slotKey, wpn]);
     }
@@ -3556,7 +3579,7 @@ export default function App() {
 
                 {equippedWeaponSlotEntries
                   .map(([slotKey, wpn], i) => {
-                    if (!wpn || wpn.type !== "weapon") return null;
+                    if (!wpn) return null;
                     const hiddenEntryKey = `${slotKey}:${wpn.id}`;
                     if (hiddenEquipmentEntries[hiddenEntryKey]) return null;
                     const normalizedWeapon = normalizeWeaponCharges(wpn);
@@ -3565,8 +3588,8 @@ export default function App() {
                   const charges = normalizedWeapon.currentCharges ?? maxCharges ?? 0;
 
                   if (!hasAttackProfile) {
-                    // Stat-boost-only gear (AC/MR/Speed/statBonus) is applied automatically; skip the redundant "Passive" card.
-                    if (hasPassiveStatBoost(normalizedWeapon)) return null;
+                    // Stat-boost-only gear stays hidden unless its description opts into a Passive card.
+                    if (hasPassiveStatBoost(normalizedWeapon) && !hasPassiveDescription(normalizedWeapon.description)) return null;
                     return (
                       <div key={i} style={{ background: "linear-gradient(135deg, #101008, #17130a)", border: "1px solid rgba(196,133,58,0.2)", borderRadius: 5, padding: "10px 14px" }}
                         onMouseDown={beginLongPress(() => setHidePrompt({ kind: "slot", key: hiddenEntryKey, label: normalizedWeapon.name }))}
@@ -3585,7 +3608,7 @@ export default function App() {
                           {normalizedWeapon.description || "Equipped passive gear effect."}
                         </div>
                         <div className="text-[10px] mt-1" style={{ color: "#6a5a3a", fontFamily: "'JetBrains Mono', monospace" }}>
-                          {[normalizedWeapon.speedBonus ? `Speed +${normalizedWeapon.speedBonus}` : "", normalizedWeapon.acBonus ? `AC +${normalizedWeapon.acBonus}` : "", normalizedWeapon.magicResistBonus ? `MR +${normalizedWeapon.magicResistBonus}` : ""].filter(Boolean).join(" • ")}
+                          {getItemBonusSummary(normalizedWeapon).join(" • ")}
                         </div>
                       </div>
                     );
@@ -3608,6 +3631,13 @@ export default function App() {
                             <span className="text-xs" style={{ fontFamily: "'JetBrains Mono', monospace", color: "#c4853a" }}>{charges}/{maxCharges}</span>
                           ) : null}
                         </div>
+                        {hasPassiveDescription(normalizedWeapon.description) ? (
+                          <div className="mb-2 px-2 py-1" style={{ background: "rgba(106,170,106,0.08)", border: "1px solid rgba(106,170,106,0.22)", borderRadius: 4 }}>
+                            <div className="text-[10px] uppercase tracking-[0.2em] mb-0.5" style={{ color: "#6aaa6a", fontFamily: "'Cinzel', serif" }}>Passive</div>
+                            <div className="text-xs" style={{ color: "#9a8a6a", fontFamily: "'Crimson Pro', serif" }}>{normalizedWeapon.description}</div>
+                            <div className="text-[10px] mt-1" style={{ color: "#6a5a3a", fontFamily: "'JetBrains Mono', monospace" }}>{getItemBonusSummary(normalizedWeapon).join(" • ")}</div>
+                          </div>
+                        ) : null}
                         {maxCharges ? (
                           <div className="mb-2">
                             {maxCharges <= 24 ? (
@@ -3714,11 +3744,12 @@ export default function App() {
                             const attackPreview = atk.formula
                               ? atk.formula
                               : `d${atk.die ?? "?"} + ${atk.stat ?? "?"}${atk.damageBonus ? ` +${atk.damageBonus}` : ""}`;
-                            const noCharges = atk.consumesCharge && maxCharges && charges <= 0;
+                            const passiveAttack = hasPassiveDescription(atk.description);
+                            const noCharges = !passiveAttack && atk.consumesCharge && maxCharges && charges <= 0;
                             return (
-                              <button key={atkIdx} onClick={() => doWeaponAttack(normalizedWeapon, atkIdx)} disabled={!!noCharges}
+                              <button key={atkIdx} onClick={() => doWeaponAttack(normalizedWeapon, atkIdx)} disabled={!!noCharges || passiveAttack}
                                 className="w-full py-2 px-3 text-left transition-all hover:opacity-90 active:scale-95"
-                                style={{ background: noCharges ? "#111008" : "rgba(196,133,58,0.1)", border: `1px solid ${noCharges ? "rgba(196,133,58,0.1)" : "rgba(196,133,58,0.35)"}`, borderRadius: 4, cursor: noCharges ? "default" : "pointer", opacity: noCharges ? 0.45 : 1 }}
+                                style={{ background: noCharges || passiveAttack ? "#111008" : "rgba(196,133,58,0.1)", border: `1px solid ${noCharges || passiveAttack ? "rgba(196,133,58,0.1)" : "rgba(196,133,58,0.35)"}`, borderRadius: 4, cursor: noCharges || passiveAttack ? "default" : "pointer", opacity: noCharges || passiveAttack ? 0.65 : 1 }}
                                 onMouseDown={beginLongPress(() => setHidePrompt({ kind: "weapon-attack", key: `${normalizedWeapon.id}:${atkIdx}`, label: atk.name }))}
                                 onMouseUp={cancelLongPress}
                                 onMouseLeave={cancelLongPress}
@@ -3767,7 +3798,7 @@ export default function App() {
                         style={{ background: "transparent", border: "none", padding: 0, cursor: "pointer" }}>
                         <div className="flex items-center justify-between gap-2 mb-1">
                           <div className="text-sm font-bold" style={{ fontFamily: "'Cinzel', serif", color: "#e2cfa0" }}>{normalizedWeapon.name}</div>
-                          <ActionCostBadge cost={getActionCost(normalizedWeapon.description)} />
+                          <ActionCostBadge cost={getExecutableActionCost(normalizedWeapon.description)} />
                         </div>
                         <div className="text-xs" style={{ color: "#9a8a6a", fontFamily: "'JetBrains Mono', monospace" }}>
                           {normalizedWeapon.weaponFormula
@@ -3781,6 +3812,13 @@ export default function App() {
                           {normalizedWeapon.omnivamp ? ` • omnivamp ${normalizedWeapon.omnivamp}%` : null}
                         </div>
                       </button>
+                      {hasPassiveDescription(normalizedWeapon.description) ? (
+                        <div className="mt-2 px-2 py-1" style={{ background: "rgba(106,170,106,0.08)", border: "1px solid rgba(106,170,106,0.22)", borderRadius: 4 }}>
+                          <div className="text-[10px] uppercase tracking-[0.2em] mb-0.5" style={{ color: "#6aaa6a", fontFamily: "'Cinzel', serif" }}>Passive</div>
+                          <div className="text-xs" style={{ color: "#9a8a6a", fontFamily: "'Crimson Pro', serif" }}>{normalizedWeapon.description}</div>
+                          <div className="text-[10px] mt-1" style={{ color: "#6a5a3a", fontFamily: "'JetBrains Mono', monospace" }}>{getItemBonusSummary(normalizedWeapon).join(" • ")}</div>
+                        </div>
+                      ) : null}
                       {maxCharges ? (
                         <div className="mt-2">
                           <div className="flex items-center gap-2 mb-2">
