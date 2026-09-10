@@ -668,7 +668,7 @@ export default function App() {
   const [bonusActionUsed, setBonusActionUsed] = useState(false);
 
   // ─── Long rest ────────────────────────────────────────────────────────────
-  type LongRestStep = "confirm" | "result" | "party" | null;
+  type LongRestStep = "confirm" | null;
   const [longRestStep, setLongRestStep] = useState<LongRestStep>(null);
   const [longRestRoll, setLongRestRoll] = useState(0);
   const [longRestSafe, setLongRestSafe] = useState(false);
@@ -999,7 +999,7 @@ export default function App() {
     if (d.damageType !== undefined) setDamageType(d.damageType);
     if (d.actionUsedSlots !== undefined) setActionUsedSlots(d.actionUsedSlots);
     if (d.bonusActionUsed !== undefined) setBonusActionUsed(d.bonusActionUsed);
-    if (d.longRestStep !== undefined) setLongRestStep(d.longRestStep);
+    if (d.longRestStep !== undefined) setLongRestStep(d.longRestStep === "confirm" ? "confirm" : null);
     if (d.longRestRoll !== undefined) setLongRestRoll(d.longRestRoll);
     if (d.longRestSafe !== undefined) setLongRestSafe(d.longRestSafe);
     if (d.fightMenuOpen !== undefined) setFightMenuOpen(d.fightMenuOpen);
@@ -2274,14 +2274,6 @@ export default function App() {
     setWizardCounterspellCharges((prev) => prev - 1);
     setWizardSpellSlots((prev) => prev + 1);
     addLog("🛡 Counterspell — you captured spell slots from an enemy spellcaster's casting.", "info");
-  };
-
-  const doLongRestRoll = () => {
-    const roll = rollD(20);
-    const total = roll + effectiveStats.INT;
-    setLongRestRoll(total);
-    setLongRestSafe(total >= 10);
-    setLongRestStep("result");
   };
 
   const completeLongRest = () => {
@@ -5534,7 +5526,7 @@ export default function App() {
               <div className="text-4xl mb-4">🌙</div>
               <h2 className="text-base font-bold mb-2" style={{ fontFamily: "'Cinzel', serif", color: "#e2cfa0" }}>Long Rest</h2>
               <p className="text-sm mb-6" style={{ color: "#9a8a6a", fontFamily: "'Crimson Pro', serif" }}>
-                Are you sure you want to attempt a long rest?
+                Are you sure you want to long rest?
               </p>
               <div className="flex gap-3">
                 <button onClick={() => setLongRestStep(null)}
@@ -5542,56 +5534,10 @@ export default function App() {
                   style={{ background: "none", border: "1px solid rgba(196,133,58,0.2)", borderRadius: 5, color: "#9a8a6a", fontFamily: "'Cinzel', serif", cursor: "pointer" }}>
                   Cancel
                 </button>
-                <button onClick={doLongRestRoll}
+                <button onClick={completeLongRest}
                   className="px-5 py-2 text-sm font-semibold hover:opacity-90"
                   style={{ background: "linear-gradient(135deg, #0e0c18, #141028)", border: "1px solid rgba(106,90,200,0.5)", borderRadius: 5, color: "#b0a0e0", fontFamily: "'Cinzel', serif", cursor: "pointer" }}>
                   Rest
-                </button>
-              </div>
-            </>)}
-
-            {longRestStep === "result" && (<>
-              <div className="text-4xl mb-3">{longRestSafe ? "✦" : "⚠"}</div>
-              <div className="text-xs uppercase tracking-widest mb-1" style={{ color: "#9a8a6a", fontFamily: "'Cinzel', serif" }}>
-                d20 + INT ({effectiveStats.INT}) =
-              </div>
-              <div className="text-5xl font-bold mb-2" style={{ fontFamily: "'JetBrains Mono', monospace", color: longRestSafe ? "#6aaa6a" : "#c43a3a" }}>
-                {longRestRoll}
-              </div>
-              <h2 className="text-base font-bold mb-2" style={{ fontFamily: "'Cinzel', serif", color: longRestSafe ? "#6aaa6a" : "#c43a3a" }}>
-                {longRestSafe ? "You are safe." : "You are not safe."}
-              </h2>
-              <p className="text-sm mb-6" style={{ color: "#9a8a6a", fontFamily: "'Crimson Pro', serif" }}>
-                {longRestSafe
-                  ? "The night passes without incident. Your watch holds."
-                  : "Something stirs in the dark. The rest is uneasy."}
-              </p>
-              <button onClick={() => setLongRestStep("party")}
-                className="px-6 py-2 text-sm font-semibold hover:opacity-90"
-                style={{ background: "linear-gradient(135deg, #0e0c18, #141028)", border: "1px solid rgba(106,90,200,0.4)", borderRadius: 5, color: "#b0a0e0", fontFamily: "'Cinzel', serif", cursor: "pointer" }}>
-                Continue
-              </button>
-            </>)}
-
-            {longRestStep === "party" && (<>
-              <div className="text-4xl mb-4">🏕</div>
-              <h2 className="text-base font-bold mb-2" style={{ fontFamily: "'Cinzel', serif", color: "#e2cfa0" }}>Party Rest</h2>
-              <p className="text-sm mb-1" style={{ color: "#9a8a6a", fontFamily: "'Crimson Pro', serif" }}>
-                Did your party rest successfully?
-              </p>
-              <p className="text-xs mb-6 italic" style={{ color: "#6a5a3a", fontFamily: "'Crimson Pro', serif" }}>
-                (Above fifty percent "safe")
-              </p>
-              <div className="flex gap-3">
-                <button onClick={() => setLongRestStep(null)}
-                  className="px-5 py-2 text-sm hover:opacity-80"
-                  style={{ background: "rgba(139,28,28,0.2)", border: "1px solid rgba(139,28,28,0.4)", borderRadius: 5, color: "#f5c5c5", fontFamily: "'Cinzel', serif", cursor: "pointer" }}>
-                  No
-                </button>
-                <button onClick={completeLongRest}
-                  className="px-5 py-2 text-sm font-semibold hover:opacity-90"
-                  style={{ background: "rgba(90,170,90,0.2)", border: "1px solid rgba(90,170,90,0.4)", borderRadius: 5, color: "#7acc7a", fontFamily: "'Cinzel', serif", cursor: "pointer" }}>
-                  Yes
                 </button>
               </div>
             </>)}
