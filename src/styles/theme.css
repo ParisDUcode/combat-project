@@ -1,26 +1,26 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  --font-size: 15px;
-  --background: #0c0a08;
-  --foreground: #e2cfa0;
-  --card: #141009;
-  --card-foreground: #e2cfa0;
-  --popover: #1a1510;
-  --popover-foreground: #e2cfa0;
+  --font-size: 14px;
+  --background: #0a0a0a;
+  --foreground: #e2d9c8;
+  --card: #161412;
+  --card-foreground: #e2d9c8;
+  --popover: #1e1b18;
+  --popover-foreground: #e2d9c8;
   --primary: #8b1c1c;
   --primary-foreground: #f5e6c8;
-  --secondary: #1e1a12;
-  --secondary-foreground: #e2cfa0;
-  --muted: #1e1a12;
-  --muted-foreground: #9a8a6a;
+  --secondary: #1e1b18;
+  --secondary-foreground: #e2d9c8;
+  --muted: #1e1b18;
+  --muted-foreground: #bdb4a5;
   --accent: #c4853a;
   --accent-foreground: #0c0a08;
   --destructive: #6b1212;
   --destructive-foreground: #f5c5c5;
   --border: rgba(196, 133, 58, 0.18);
   --input: rgba(196, 133, 58, 0.08);
-  --input-background: #1e1a12;
+  --input-background: #1e1b18;
   --switch-background: #3a3020;
   --font-weight-medium: 600;
   --font-weight-normal: 400;
@@ -137,6 +137,32 @@ input[type=number]::-webkit-outer-spin-button {
 
   body {
     @apply bg-background text-foreground;
+  }
+
+  .character-sheet {
+    font-family: Inter, "Segoe UI", system-ui, sans-serif;
+    font-size: 14px;
+    line-height: 1.45;
+  }
+
+  .character-sheet p,
+  .character-sheet textarea,
+  .character-sheet input,
+  .character-sheet [style*="Crimson Pro"],
+  .character-sheet [style*="JetBrains Mono"] {
+    color: #e2d9c8 !important;
+    font-family: Inter, "Segoe UI", system-ui, sans-serif !important;
+    line-height: 1.45;
+  }
+
+  .character-sheet [style*="#9a8a6a"],
+  .character-sheet [style*="#8a7a5a"],
+  .character-sheet [style*="#6a5a3a"] {
+    color: #bdb4a5 !important;
+  }
+
+  .character-sheet .character-name-input {
+    font-family: "Cinzel", serif !important;
   }
 
   /**

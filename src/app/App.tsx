@@ -2869,7 +2869,7 @@ export default function App() {
 
   const panelStyle = {
     border: "1px solid rgba(196,133,58,0.2)",
-    background: "#0e0c08",
+    background: "#161412",
     borderRadius: 6,
     padding: "16px",
   };
@@ -2917,8 +2917,8 @@ export default function App() {
     .filter((ability) => !ability.hidden && (ability.type === "Scar" || ability.type === "Feat") && ability.themeMode)
     .at(-1)?.themeMode;
   const themeAccent = activeTheme?.accentColor ?? "#c4853a";
-  const themeBackground = activeTheme?.backgroundColor ?? "#0c0a08";
-  const themeText = activeTheme?.textColor ?? "#e2cfa0";
+  const themeBackground = activeTheme?.backgroundColor ?? "#0a0a0a";
+  const themeText = activeTheme?.textColor ?? "#e2d9c8";
   const themeEmoji = activeTheme?.emoji ?? "✨";
   const themeEmojiSize = activeTheme?.emojiSize === "small"
     ? 56
@@ -2931,10 +2931,10 @@ export default function App() {
           : 104;
   const themeOverlayOpacity = activeTheme?.overlayOpacity ?? 0;
   const themeRootStyle = {
-    fontFamily: "'Crimson Pro', Georgia, serif",
+    fontFamily: "Inter, 'Segoe UI', system-ui, sans-serif",
     background: activeTheme
-      ? `radial-gradient(ellipse at 30% 10%, ${themeBackground} 0%, #0c0a08 70%)`
-      : "radial-gradient(ellipse at 30% 10%, #1a1208 0%, #0c0a08 60%)",
+      ? `radial-gradient(ellipse at 30% 10%, ${themeBackground} 0%, #0a0a0a 70%)`
+      : "radial-gradient(ellipse at 30% 10%, #161412 0%, #0a0a0a 60%)",
     color: themeText,
     "--theme-accent": themeAccent,
     "--theme-text": themeText,
@@ -2942,7 +2942,7 @@ export default function App() {
 
   return (
     <div
-      className="min-h-screen w-full"
+      className="character-sheet min-h-screen w-full"
       onClick={() => setAdminOpen(false)}
       style={themeRootStyle}
     >
@@ -2962,7 +2962,7 @@ export default function App() {
       )}
       <div className="w-full h-1" style={{ background: "linear-gradient(90deg, transparent, #c4853a 30%, #8b1c1c 50%, #c4853a 70%, transparent)" }} />
 
-      <div className="max-w-[1440px] w-full mx-auto px-6 py-4">
+      <div className="max-w-[1720px] w-full mx-auto px-6 py-4">
 
         {activeTheme && (
           <div
@@ -2999,7 +2999,7 @@ export default function App() {
                   value={characterName}
                   onChange={(e) => setCharacterName(e.target.value)}
                   placeholder="Character Name"
-                  className="bg-transparent border-b text-3xl md:text-4xl outline-none"
+                  className="character-name-input bg-transparent border-b text-3xl md:text-4xl outline-none"
                   style={{ fontFamily: "'Cinzel', serif", color: "#e2cfa0", borderColor: "rgba(196,133,58,0.4)", letterSpacing: "0.05em", minWidth: 240 }}
                 />
                 <div className="flex items-center gap-1.5">
@@ -3174,13 +3174,13 @@ export default function App() {
         </div>
 
         {/* Main grid */}
-        <div className="grid grid-cols-1 md:grid-cols-[260px_1fr] xl:grid-cols-[280px_1fr_1fr] gap-3 xl:h-[calc(100vh-140px)]">
+        <div className="grid grid-cols-1 md:grid-cols-[280px_minmax(0,1fr)] xl:grid-cols-[280px_minmax(560px,1.45fr)_minmax(360px,0.9fr)] gap-4 xl:h-[calc(100vh-140px)]">
 
           {/* LEFT: Portrait + Stats */}
           <div className="flex flex-col gap-3 xl:overflow-y-auto" style={{ scrollbarWidth: "thin", scrollbarColor: "rgba(196,133,58,0.2) transparent" }}>
 
             {/* Portrait */}
-            <div className="relative flex flex-col" style={{ border: "1px solid rgba(196,133,58,0.3)", background: "#0e0c08", borderRadius: 6, aspectRatio: "3/4", width: "75%", overflow: "hidden" }}>
+            <div className="relative flex flex-col" style={{ border: "1px solid rgba(196,133,58,0.3)", background: "#161412", borderRadius: 6, aspectRatio: "3/4", width: "100%", overflow: "hidden" }}>
               {portrait && (
                 <img src={portrait} alt="Character portrait" className="w-full h-full object-contain"
                   style={{ display: portraitValid ? "block" : "none" }}
