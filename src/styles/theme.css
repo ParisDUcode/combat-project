@@ -1,7 +1,7 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  --font-size: 16px;
+  --font-size: 15px;
   --background: #0c0a08;
   --foreground: #e2cfa0;
   --card: #141009;
@@ -137,11 +137,6 @@ input[type=number]::-webkit-outer-spin-button {
 
   body {
     @apply bg-background text-foreground;
-    font-size: 1rem;
-    line-height: 1.6;
-    letter-spacing: 0.01em;
-    -webkit-font-smoothing: antialiased;
-    text-rendering: optimizeLegibility;
   }
 
   /**
@@ -156,54 +151,43 @@ input[type=number]::-webkit-outer-spin-button {
   h1 {
     font-size: var(--text-2xl);
     font-weight: var(--font-weight-medium);
-    line-height: 1.35;
+    line-height: 1.5;
   }
 
   h2 {
     font-size: var(--text-xl);
     font-weight: var(--font-weight-medium);
-    line-height: 1.35;
+    line-height: 1.5;
   }
 
   h3 {
     font-size: var(--text-lg);
     font-weight: var(--font-weight-medium);
-    line-height: 1.4;
+    line-height: 1.5;
   }
 
   h4 {
     font-size: var(--text-base);
     font-weight: var(--font-weight-medium);
-    line-height: 1.45;
-  }
-
-  p,
-  li,
-  label,
-  button,
-  input {
     line-height: 1.5;
   }
 
   label {
     font-size: var(--text-base);
     font-weight: var(--font-weight-medium);
+    line-height: 1.5;
   }
 
   button {
     font-size: var(--text-base);
     font-weight: var(--font-weight-medium);
+    line-height: 1.5;
   }
 
   input {
     font-size: var(--text-base);
     font-weight: var(--font-weight-normal);
-  }
-}
-
-@media (min-width: 1280px) {
-  :root {
-    --font-size: 17px;
+    line-height: 1.5;
   }
 }
 

@@ -666,7 +666,8 @@ export default function App() {
   // ─── Combat action tracker ────────────────────────────────────────────────
   const [actionUsedSlots, setActionUsedSlots] = useState<boolean[]>([false]);
   const [bonusActionUsed, setBonusActionUsed] = useState(false);
-   // ─── Long rest ────────────────────────────────────────────────────────────
+
+  // ─── Long rest ────────────────────────────────────────────────────────────
   type LongRestStep = "confirm" | null;
   const [longRestStep, setLongRestStep] = useState<LongRestStep>(null);
   const [longRestRoll, setLongRestRoll] = useState(0);
@@ -2961,7 +2962,7 @@ export default function App() {
       )}
       <div className="w-full h-1" style={{ background: "linear-gradient(90deg, transparent, #c4853a 30%, #8b1c1c 50%, #c4853a 70%, transparent)" }} />
 
-      <div className="max-w-[1440px] w-full mx-auto px-5 py-3">
+      <div className="max-w-[1440px] w-full mx-auto px-6 py-4">
 
         {activeTheme && (
           <div
@@ -3453,7 +3454,7 @@ export default function App() {
               </div>
               {statPopup === "Omnivamp" && SECONDARY_DESCRIPTIONS.Omnivamp && (
                 <div className="mb-3 px-3 py-2 rounded" style={{ background: "rgba(224,80,80,0.08)", border: "1px solid rgba(224,80,80,0.35)" }}>
-                  <p className="text-sm leading-relaxed" style={{ color: "#9a8a6a", fontFamily: "'Crimson Pro', serif" }}>
+                  <p className="text-xs leading-relaxed" style={{ color: "#9a8a6a", fontFamily: "'Crimson Pro', serif", fontSize: 13 }}>
                     {SECONDARY_DESCRIPTIONS.Omnivamp}
                   </p>
                 </div>
@@ -3491,7 +3492,7 @@ export default function App() {
                         Passive
                       </span>
                     </div>
-                    <div className="text-sm leading-relaxed" style={{ color: "#9a8a6a", fontFamily: "'Crimson Pro', serif" }}>
+                    <div className="text-xs" style={{ color: "#9a8a6a", fontFamily: "'Crimson Pro', serif" }}>
                       {ability.description || "Passive ability."}
                     </div>
                   </div>
@@ -3529,7 +3530,7 @@ export default function App() {
                             </span>
                           ) : null}
                         </div>
-                        <div className="text-sm leading-relaxed mb-2" style={{ color: "#9a8a6a", fontFamily: "'Crimson Pro', serif" }}>
+                        <div className="text-xs mb-2" style={{ color: "#9a8a6a", fontFamily: "'Crimson Pro', serif" }}>
                           {ability.description}
                         </div>
                         <div className="flex flex-col gap-1">
@@ -3595,7 +3596,7 @@ export default function App() {
                           <div className="text-sm font-bold" style={{ fontFamily: "'Cinzel', serif", color: "#e2cfa0" }}>{normalizedWeapon.name}</div>
                           <span className="text-[10px] uppercase tracking-[0.2em]" style={{ color: "#9a8a6a", fontFamily: "'Cinzel', serif" }}>Passive</span>
                         </div>
-                        <div className="text-sm leading-relaxed" style={{ color: "#9a8a6a", fontFamily: "'Crimson Pro', serif" }}>
+                        <div className="text-xs" style={{ color: "#9a8a6a", fontFamily: "'Crimson Pro', serif" }}>
                           {normalizedWeapon.description || "Equipped passive gear effect."}
                         </div>
                         <div className="text-[10px] mt-1" style={{ color: "#6a5a3a", fontFamily: "'JetBrains Mono', monospace" }}>
@@ -3622,10 +3623,10 @@ export default function App() {
                             <span className="text-xs" style={{ fontFamily: "'JetBrains Mono', monospace", color: "#c4853a" }}>{charges}/{maxCharges}</span>
                           ) : null}
                         </div>
-                        {hasPassiveDescription(normalizedWeapon.description) && !normalizedWeapon.attacks.some((atk) => hasPassiveDescription(atk.description)) ? (
+                        {hasPassiveDescription(normalizedWeapon.description) ? (
                           <div className="mb-2 px-2 py-1" style={{ background: "rgba(106,170,106,0.08)", border: "1px solid rgba(106,170,106,0.22)", borderRadius: 4 }}>
                             <div className="text-[10px] uppercase tracking-[0.2em] mb-0.5" style={{ color: "#6aaa6a", fontFamily: "'Cinzel', serif" }}>Passive</div>
-                            <div className="text-sm leading-relaxed" style={{ color: "#9a8a6a", fontFamily: "'Crimson Pro', serif" }}>{normalizedWeapon.description}</div>
+                            <div className="text-xs" style={{ color: "#9a8a6a", fontFamily: "'Crimson Pro', serif" }}>{normalizedWeapon.description}</div>
                             <div className="text-[10px] mt-1" style={{ color: "#6a5a3a", fontFamily: "'JetBrains Mono', monospace" }}>{getItemBonusSummary(normalizedWeapon).join(" • ")}</div>
                           </div>
                         ) : null}
@@ -3736,35 +3737,11 @@ export default function App() {
                               ? atk.formula
                               : `d${atk.die ?? "?"} + ${atk.stat ?? "?"}${atk.damageBonus ? ` +${atk.damageBonus}` : ""}`;
                             const passiveAttack = hasPassiveDescription(atk.description);
-
-                            if (passiveAttack) {
-                              return (
-                                <div key={atkIdx} className="px-2 py-1"
-                                  style={{ background: "rgba(106,170,106,0.08)", border: "1px solid rgba(106,170,106,0.22)", borderRadius: 4 }}
-                                  onMouseDown={beginLongPress(() => setHidePrompt({ kind: "weapon-attack", key: `${normalizedWeapon.id}:${atkIdx}`, label: atk.name }))}
-                                  onMouseUp={cancelLongPress}
-                                  onMouseLeave={cancelLongPress}
-                                  onTouchStart={beginLongPress(() => setHidePrompt({ kind: "weapon-attack", key: `${normalizedWeapon.id}:${atkIdx}`, label: atk.name }))}
-                                  onTouchEnd={cancelLongPress}
-                                  onTouchCancel={cancelLongPress}
-                                  onClickCapture={handleCardClickCapture}
-                                >
-                                  <div className="flex items-center justify-between gap-2 mb-0.5">
-                                    <span className="text-xs font-semibold" style={{ fontFamily: "'Cinzel', serif", color: "#e2cfa0" }}>{atk.name}</span>
-                                    <span className="text-[10px] uppercase tracking-[0.2em]" style={{ color: "#6aaa6a", fontFamily: "'Cinzel', serif" }}>Passive</span>
-                                  </div>
-                                  {atk.description ? (
-                                    <div className="text-sm leading-relaxed" style={{ color: "#9a8a6a", fontFamily: "'Crimson Pro', serif" }}>{atk.description}</div>
-                                  ) : null}
-                                </div>
-                              );
-                            }
-
-                            const noCharges = atk.consumesCharge && maxCharges && charges <= 0;
+                            const noCharges = !passiveAttack && atk.consumesCharge && maxCharges && charges <= 0;
                             return (
-                              <button key={atkIdx} onClick={() => doWeaponAttack(normalizedWeapon, atkIdx)} disabled={!!noCharges}
+                              <button key={atkIdx} onClick={() => doWeaponAttack(normalizedWeapon, atkIdx)} disabled={!!noCharges || passiveAttack}
                                 className="w-full py-2 px-3 text-left transition-all hover:opacity-90 active:scale-95"
-                                style={{ background: noCharges ? "#111008" : "rgba(196,133,58,0.1)", border: `1px solid ${noCharges ? "rgba(196,133,58,0.1)" : "rgba(196,133,58,0.35)"}`, borderRadius: 4, cursor: noCharges ? "default" : "pointer", opacity: noCharges ? 0.45 : 1 }}
+                                style={{ background: noCharges || passiveAttack ? "#111008" : "rgba(196,133,58,0.1)", border: `1px solid ${noCharges || passiveAttack ? "rgba(196,133,58,0.1)" : "rgba(196,133,58,0.35)"}`, borderRadius: 4, cursor: noCharges || passiveAttack ? "default" : "pointer", opacity: noCharges || passiveAttack ? 0.65 : 1 }}
                                 onMouseDown={beginLongPress(() => setHidePrompt({ kind: "weapon-attack", key: `${normalizedWeapon.id}:${atkIdx}`, label: atk.name }))}
                                 onMouseUp={cancelLongPress}
                                 onMouseLeave={cancelLongPress}
@@ -3786,7 +3763,7 @@ export default function App() {
                                   {normalizedWeapon.omnivamp ? ` • omnivamp ${normalizedWeapon.omnivamp}%` : null}
                                 </div>
                                 {atk.description ? (
-                                  <div className="text-sm leading-relaxed mt-1" style={{ color: "#8a7a5a", fontFamily: "'Crimson Pro', serif" }}>
+                                  <div className="text-xs leading-snug mt-1" style={{ color: "#8a7a5a", fontFamily: "'Crimson Pro', serif" }}>
                                     {atk.description}
                                   </div>
                                 ) : null}
