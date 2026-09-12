@@ -2961,7 +2961,7 @@ export default function App() {
       )}
       <div className="w-full h-1" style={{ background: "linear-gradient(90deg, transparent, #c4853a 30%, #8b1c1c 50%, #c4853a 70%, transparent)" }} />
 
-      <div className="max-w-[1440px] w-full mx-auto px-6 py-4">
+      <div className="max-w-[1440px] w-full mx-auto px-5 py-3">
 
         {activeTheme && (
           <div
@@ -3453,7 +3453,7 @@ export default function App() {
               </div>
               {statPopup === "Omnivamp" && SECONDARY_DESCRIPTIONS.Omnivamp && (
                 <div className="mb-3 px-3 py-2 rounded" style={{ background: "rgba(224,80,80,0.08)", border: "1px solid rgba(224,80,80,0.35)" }}>
-                  <p className="text-xs leading-relaxed" style={{ color: "#9a8a6a", fontFamily: "'Crimson Pro', serif", fontSize: 13 }}>
+                  <p className="text-sm leading-relaxed" style={{ color: "#9a8a6a", fontFamily: "'Crimson Pro', serif" }}>
                     {SECONDARY_DESCRIPTIONS.Omnivamp}
                   </p>
                 </div>
@@ -3491,7 +3491,7 @@ export default function App() {
                         Passive
                       </span>
                     </div>
-                    <div className="text-xs" style={{ color: "#9a8a6a", fontFamily: "'Crimson Pro', serif" }}>
+                    <div className="text-sm leading-relaxed" style={{ color: "#9a8a6a", fontFamily: "'Crimson Pro', serif" }}>
                       {ability.description || "Passive ability."}
                     </div>
                   </div>
@@ -3529,7 +3529,7 @@ export default function App() {
                             </span>
                           ) : null}
                         </div>
-                        <div className="text-xs mb-2" style={{ color: "#9a8a6a", fontFamily: "'Crimson Pro', serif" }}>
+                        <div className="text-sm leading-relaxed mb-2" style={{ color: "#9a8a6a", fontFamily: "'Crimson Pro', serif" }}>
                           {ability.description}
                         </div>
                         <div className="flex flex-col gap-1">
@@ -3595,7 +3595,7 @@ export default function App() {
                           <div className="text-sm font-bold" style={{ fontFamily: "'Cinzel', serif", color: "#e2cfa0" }}>{normalizedWeapon.name}</div>
                           <span className="text-[10px] uppercase tracking-[0.2em]" style={{ color: "#9a8a6a", fontFamily: "'Cinzel', serif" }}>Passive</span>
                         </div>
-                        <div className="text-xs" style={{ color: "#9a8a6a", fontFamily: "'Crimson Pro', serif" }}>
+                        <div className="text-sm leading-relaxed" style={{ color: "#9a8a6a", fontFamily: "'Crimson Pro', serif" }}>
                           {normalizedWeapon.description || "Equipped passive gear effect."}
                         </div>
                         <div className="text-[10px] mt-1" style={{ color: "#6a5a3a", fontFamily: "'JetBrains Mono', monospace" }}>
@@ -3625,7 +3625,7 @@ export default function App() {
                         {hasPassiveDescription(normalizedWeapon.description) && !normalizedWeapon.attacks.some((atk) => hasPassiveDescription(atk.description)) ? (
                           <div className="mb-2 px-2 py-1" style={{ background: "rgba(106,170,106,0.08)", border: "1px solid rgba(106,170,106,0.22)", borderRadius: 4 }}>
                             <div className="text-[10px] uppercase tracking-[0.2em] mb-0.5" style={{ color: "#6aaa6a", fontFamily: "'Cinzel', serif" }}>Passive</div>
-                            <div className="text-xs" style={{ color: "#9a8a6a", fontFamily: "'Crimson Pro', serif" }}>{normalizedWeapon.description}</div>
+                            <div className="text-sm leading-relaxed" style={{ color: "#9a8a6a", fontFamily: "'Crimson Pro', serif" }}>{normalizedWeapon.description}</div>
                             <div className="text-[10px] mt-1" style={{ color: "#6a5a3a", fontFamily: "'JetBrains Mono', monospace" }}>{getItemBonusSummary(normalizedWeapon).join(" • ")}</div>
                           </div>
                         ) : null}
@@ -3754,7 +3754,7 @@ export default function App() {
                                     <span className="text-[10px] uppercase tracking-[0.2em]" style={{ color: "#6aaa6a", fontFamily: "'Cinzel', serif" }}>Passive</span>
                                   </div>
                                   {atk.description ? (
-                                    <div className="text-xs" style={{ color: "#9a8a6a", fontFamily: "'Crimson Pro', serif" }}>{atk.description}</div>
+                                    <div className="text-sm leading-relaxed" style={{ color: "#9a8a6a", fontFamily: "'Crimson Pro', serif" }}>{atk.description}</div>
                                   ) : null}
                                 </div>
                               );
@@ -3786,7 +3786,7 @@ export default function App() {
                                   {normalizedWeapon.omnivamp ? ` • omnivamp ${normalizedWeapon.omnivamp}%` : null}
                                 </div>
                                 {atk.description ? (
-                                  <div className="text-xs leading-snug mt-1" style={{ color: "#8a7a5a", fontFamily: "'Crimson Pro', serif" }}>
+                                  <div className="text-sm leading-relaxed mt-1" style={{ color: "#8a7a5a", fontFamily: "'Crimson Pro', serif" }}>
                                     {atk.description}
                                   </div>
                                 ) : null}
