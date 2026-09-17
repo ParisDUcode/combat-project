@@ -84,6 +84,7 @@ interface Spell extends Ability {
   isSpell: true;
   damageDie?: number;
   damageStat?: StatKey;
+  formula?: string; // overrides damageDie/damageStat when present
   statModifiers?: AbilityModifier[];
   slotCost?: number;
   slotCostMax?: number;
@@ -497,6 +498,7 @@ const normalizeStatExpression = (value: unknown): string | undefined => {
 const isSpellLikeEntry = (entry: any): boolean => Boolean(entry?.isSpell)
   || entry?.damageDie !== undefined
   || entry?.damageStat !== undefined
+  || entry?.formula !== undefined
   || entry?.slotCost !== undefined
   || entry?.slotCostMax !== undefined
   || entry?.scaleDamageBySlots !== undefined;
@@ -636,6 +638,7 @@ export default function App() {
   const [spellSlotSelections, setSpellSlotSelections] = useState<Record<number, number>>({});
   const [characterLoadJsonText, setCharacterLoadJsonText] = useState("");
   const [characterLoadJsonOpen, setCharacterLoadJsonOpen] = useState(false);
+  const [deleteSpellsOpen, setDeleteSpellsOpen] = useState(false);
 
   const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null);
   const [inventoryPanelVisible, setInventoryPanelVisible] = useState(false);
@@ -861,6 +864,7 @@ export default function App() {
             })),
           }
         : {}),
+      ...(spell?.formula !== undefined ? { formula: normalizeFormulaStatTokens(String(spell.formula)) } : {}),
       ...(spell?.slotCost !== undefined ? { slotCost: Math.max(1, Number(spell.slotCost) || 1) } : {}),
       ...(spell?.slotCostMax !== undefined ? { slotCostMax: Math.max(1, Number(spell.slotCostMax) || 1) } : {}),
       ...(spell?.scaleDamageBySlots !== undefined ? { scaleDamageBySlots: Boolean(spell.scaleDamageBySlots) } : {}),
@@ -2530,8 +2534,9 @@ export default function App() {
       "- Scars and Feats can optionally define themeMode. The last visible Scar or Feat with themeMode wins.\n" +
       "- themeMode supports accentColor, backgroundColor, textColor, emoji, emojiSize (small|medium|large or a number), and overlayOpacity (0 to 0.35).\n" +
       "- Theme colors accept hex, rgb/rgba, hsl/hsla, or named CSS colors. Invalid values fall back safely.\n" +
-      "- For spells, support damageDie, damageStat, statModifiers, slotCost, slotCostMax, and scaleDamageBySlots.\n" +
+      "- For spells, support damageDie, damageStat, formula, statModifiers, slotCost, slotCostMax, and scaleDamageBySlots.\n" +
       "- A spell can use just damageDie if you want a die-only effect with no extra stat bonus; damageStat is optional.\n" +
+      "- formula (string) overrides damageDie/damageStat when present, e.g. \"INT + PHYS + 2d6\"; supports the same dice/stat/arithmetic syntax as weaponFormula.\n" +
       "\nBehavior implemented by the app:\n" +
       "- Spells are stored as ability-like entries with isSpell: true so they can share the same data model.\n" +
       "- If slotCostMax is absent, the spell uses the fixed slotCost. If slotCostMax is present, the player can choose a value between slotCost and slotCostMax.\n" +
@@ -2550,6 +2555,7 @@ export default function App() {
       "- Minimal themed Scar:\n" +
       "  {\"abilities\":[{\"name\":\"Frog-Touched\",\"type\":\"Scar\",\"description\":\"A profoundly amphibious curse.\",\"themeMode\":{\"accentColor\":\"#62b34f\",\"backgroundColor\":\"#102a16\",\"textColor\":\"#d9f5c8\",\"emoji\":\"🐸\",\"emojiSize\":\"large\",\"overlayOpacity\":0.12}}]}\n" +
       "- Die-only example: {\"spells\":[{\"name\":\"Burst\",\"type\":\"Ability\",\"isSpell\":true,\"description\":\"A simple blast.\",\"damageDie\":12,\"slotCost\":2,\"scaleDamageBySlots\":true}]}\n" +
+      "- Formula example (formula takes priority over damageDie/damageStat when both present): {\"name\":\"Arcane Lance\",\"type\":\"Ability\",\"isSpell\":true,\"description\":\"A lance of raw force.\",\"formula\":\"INT + PHYS + 2d6\",\"slotCost\":3}\n" +
       "- Minimal bare single spell (ideal for a Content Lookup row): {\"name\":\"Spark\",\"type\":\"Ability\",\"isSpell\":true,\"description\":\"Quick magical strike.\",\"damageDie\":4,\"damageStat\":\"INT\",\"slotCost\":2,\"scaleDamageBySlots\":true}\n" +
       "- Minimal bare single feat (ideal for a Content Lookup row): {\"name\":\"Veteran Instinct\",\"type\":\"Feat\",\"description\":\"A passive edge that sharpens your battlefield awareness.\"}\n",
     template: {
@@ -2704,6 +2710,7 @@ export default function App() {
                 })),
             }
           : {}),
+        ...(s.formula !== undefined ? { formula: normalizeFormulaStatTokens(String(s.formula)) } : {}),
         ...(s.slotCost !== undefined ? { slotCost: Math.max(1, Number(s.slotCost) || 1) } : {}),
         ...(s.slotCostMax !== undefined ? { slotCostMax: Math.max(1, Number(s.slotCostMax) || 1) } : {}),
         ...(s.scaleDamageBySlots !== undefined ? { scaleDamageBySlots: Boolean(s.scaleDamageBySlots) } : {}),
@@ -2752,8 +2759,21 @@ export default function App() {
 
     setWizardSpellSlots((current) => Math.max(0, current - selectedSlotCount));
 
+    if (spell.formula && spell.formula.trim()) {
+      const outcome = evaluateWeaponFormula(spell.formula, effectiveStats);
+      if (outcome.ok) {
+        const healSuffix = (() => {
+          const heal = applyOmnivampHeal(outcome.total);
+          return heal > 0 ? ` • omnivamp ${omnivamp}% heals ${heal} HP` : "";
+        })();
+        addLog(`✨ ${spell.name} — ${selectedSlotCount} slot${selectedSlotCount > 1 ? "s" : ""}; ${outcome.detail} damage dealt${healSuffix}`, "info");
+        return;
+      }
+    }
+
     if (spell.damageDie !== undefined) {
-      const damageRolls = spell.scaleDamageBySlots ? selectedSlotCount : 1;
+      // Fixed-cost spells (no slotCostMax) must still scale off the slot count actually spent.
+      const damageRolls = spell.scaleDamageBySlots ? (selectedSlotCount || spell.slotCost || 1) : 1;
       let totalRoll = 0;
       for (let i = 0; i < damageRolls; i += 1) totalRoll += rollD(spell.damageDie);
       const statBonus = spell.damageStat ? effectiveStats[spell.damageStat] : 0;
@@ -3150,6 +3170,13 @@ export default function App() {
                     style={{ fontFamily: "'Crimson Pro', serif", color: "#e2cfa0", background: "none", border: "none", cursor: "pointer" }}
                   >
                     Paste Shared Content JSON
+                  </button>
+                  <button
+                    onClick={() => { setDeleteSpellsOpen(true); setAdminOpen(false); }}
+                    className="text-left px-4 py-2.5 text-sm hover:opacity-80 transition-opacity"
+                    style={{ fontFamily: "'Crimson Pro', serif", color: "#e2cfa0", background: "none", border: "none", cursor: "pointer" }}
+                  >
+                    Delete Spells
                   </button>
                 </div>
               )}
@@ -4141,9 +4168,11 @@ export default function App() {
                             className="text-[10px] px-2 py-0.5 rounded transition-all hover:opacity-90 active:scale-95 font-semibold"
                             style={{ background: "rgba(106,154,224,0.2)", border: "1px solid rgba(106,154,224,0.4)", color: "#6a9ae0", fontFamily: "'Cinzel', serif", cursor: "pointer" }}
                           >
-                            {spell.damageDie !== undefined
-                              ? `Cast (${spell.damageStat ? `${spell.damageStat}d${spell.damageDie}` : `d${spell.damageDie}`})`
-                              : "Cast"}
+                            {spell.formula
+                              ? `Cast (${spell.formula})`
+                              : spell.damageDie !== undefined
+                                ? `Cast (${spell.scaleDamageBySlots ? selectedSpellSlot : 1}d${spell.damageDie}${spell.damageStat ? ` + ${spell.damageStat}` : ""})`
+                                : "Cast"}
                           </button>
                           {spell.statModifiers && spell.statModifiers.length > 0 && (
                             <>
@@ -5617,6 +5646,37 @@ export default function App() {
               </button>
               <button onClick={loadCharacterFromText} className="px-4 py-2 text-sm font-semibold" style={{ background: "linear-gradient(135deg, #1a1208, #241a0c)", border: "1px solid rgba(196,133,58,0.4)", borderRadius: 4, color: "#c4853a", fontFamily: "'Cinzel', serif", cursor: "pointer" }}>
                 Load
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Spells Modal */}
+      {deleteSpellsOpen && (
+        <div className="fixed inset-0 flex items-center justify-center z-50" style={{ background: "rgba(0,0,0,0.75)" }} onClick={() => setDeleteSpellsOpen(false)}>
+          <div className="p-7 flex flex-col gap-4 w-full max-w-md" style={{ background: "#0e0c08", border: "1px solid rgba(196,133,58,0.4)", borderRadius: 8 }} onClick={(e) => e.stopPropagation()}>
+            <div className="text-base font-bold" style={{ fontFamily: "'Cinzel', serif", color: "#c4853a" }}>Delete Spells</div>
+            <div className="flex flex-col gap-2 max-h-80 overflow-y-auto">
+              {spells.length === 0 && (
+                <p className="text-xs italic" style={{ color: "#3a3020", fontFamily: "'Crimson Pro', serif" }}>No spells to delete.</p>
+              )}
+              {spells.map((spell) => (
+                <div key={spell.id} className="flex items-center justify-between px-3 py-2" style={{ background: "#111008", border: "1px solid rgba(196,133,58,0.2)", borderRadius: 4 }}>
+                  <span className="text-sm" style={{ fontFamily: "'Cinzel', serif", color: "#e2cfa0" }}>{spell.name}</span>
+                  <button
+                    onClick={() => setSpells((prev) => prev.filter((s) => s.id !== spell.id))}
+                    className="px-2 py-1 text-xs"
+                    style={{ background: "rgba(139,28,28,0.2)", border: "1px solid rgba(139,28,28,0.4)", borderRadius: 4, color: "#f5c5c5", fontFamily: "'Cinzel', serif", cursor: "pointer" }}
+                  >
+                    Delete
+                  </button>
+                </div>
+              ))}
+            </div>
+            <div className="flex justify-end">
+              <button onClick={() => setDeleteSpellsOpen(false)} className="px-4 py-2 text-sm" style={{ background: "#111008", border: "1px solid rgba(196,133,58,0.2)", borderRadius: 4, color: "#9a8a6a", fontFamily: "'Cinzel', serif", cursor: "pointer" }}>
+                Close
               </button>
             </div>
           </div>
