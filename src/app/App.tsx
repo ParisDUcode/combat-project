@@ -9,7 +9,6 @@ import {
   tickMonsterCooldowns,
 } from "./monsters/engine";
 import { BASE_MONSTER_REGISTRY } from "./monsters/registry";
-import { MONSTER_TEMPLATE, MONSTER_TEMPLATE_INSTRUCTIONS } from "./monsters/template";
 import type {
   ActiveAbility,
   MonsterCombatRuntime,
@@ -2397,283 +2396,230 @@ export default function App() {
   };
 
   // ─── Admin ────────────────────────────────────────────────────────────────
-  const WEAPON_TEMPLATE = {
-    __instructions: "MODEL TARGET: Generate item JSON that can be pasted directly into the importer with no manual fixes.\n" +
-      "\nREQUIRED TOP-LEVEL FIELDS:\n" +
-      "- name (string)\n" +
-      "- type (string): must be \"weapon\"\n" +
-      "\nOPTIONAL TOP-LEVEL FIELDS (ALL SUPPORTED):\n" +
-      "- icon (string): optional custom icon shown in inventory and detail cards\n" +
-      "- slot (string): preferred slot lock. Valid keys: head, chest, pants, boots, weapon1, weapon2, accessory1, accessory2, accessory3, accessory4\n" +
-      "- slots (string[]): optional placement list using the same keys. If provided, item can only be dropped into listed slots\n" +
-      "- description (string)\n" +
-      "- statBonus (object): keys PHYS|CON|INT|SOC, values numbers\n" +
-      "- speedBonus (number)\n" +
-      "- acBonus (number)\n" +
-      "- magicResistBonus (number)\n" +
-      "- sacrificeRewards (array): [{ name, amount?, description? }]\n" +
-      "- Any item type (weapon, armor, accessory, consumable) can include statBonus, speedBonus, acBonus, and magicResistBonus\n" +
-      "- Weapon-style fields are valid on any inventory item and are used whenever present\n" +
-      "- Put the standalone word \\\"Passive\\\" in an item or attack description to display it as Passive instead of an Action; recommended style: \\\"Passive: You may fly during your turn.\\\"\n" +
-      "- Passive is display-only narrative: it does not consume an action, bonus action, charge, or tally, and flight rules are not automated\n" +
-      "\nEQUIP/ATTACK BEHAVIOR (CURRENT BUILD):\n" +
-      "- Armor and accessory slots are weapon-capable and act as extra weapon slots\n" +
-      "- Weapons equipped in any slot can appear in the Attacks panel\n" +
-      "- The Attacks panel de-duplicates by weapon id, so a multi-slot weapon's actions show once\n" +
-      "- An item with no attack profile (no attacks/weaponFormula/die+stat) only shows as a \"Passive\" card if it also has NO acBonus, magicResistBonus, speedBonus, or statBonus set\n" +
-      "- If a no-attack item has any of acBonus/magicResistBonus/speedBonus/statBonus, it is hidden from the Attacks panel unless its description contains the standalone word Passive (the bonuses still apply automatically)\n" +
-      "\nSINGLE-ATTACK DAMAGE MODE (no attacks array):\n" +
-      "- Legacy fields: die, stat, damageBonus, extraDice, extraDie, extraDamage\n" +
-      "- Formula field: weaponFormula (string)\n" +
-      "- If weaponFormula is present, it overrides legacy damage fields for damage calc.\n" +
-      "- heal (number), healDie (number), healStat (PHYS|CON|INT|SOC) are supported in this mode.\n" +
-      "- omnivamp (number) on any equipped item adds to your character-wide omnivamp %, healing you for that % of ALL damage you deal (standard rounding).\n" +
-      "\nMULTI-ATTACK DAMAGE MODE (attacks array present):\n" +
-      "- attacks: [{ name, die?, stat?, formula?, damageBonus?, consumesCharge?, description? }]\n" +
-      "- Each attack must include either formula OR (die and stat).\n" +
-      "- formula takes precedence over die/stat for that attack.\n" +
-      "- consumesCharge true spends 1 charge per use.\n" +
-      "- description on an attack is optional and displays under that specific attack in the UI.\n" +
-      "\nFORMULA/PERMUTATION RULES:\n" +
-      "- Supported stat tokens: PHYS, CON, INT, SOC\n" +
-      "- Compound stats are valid where stat is used: e.g. \"PHYS+INT\"\n" +
-      "- Formula supports +, -, *, /, parentheses, static numbers, and NdM dice tokens\n" +
-      "- Valid examples: \"2*PHYS + 4\", \"(PHYS+INT)*2 + 1d4\", \"2d6 + INT\"\n" +
-      "\nCHARGE SYSTEM (PER WEAPON INSTANCE):\n" +
-      "- maxCharges (number): total pool; large values supported (e.g. 200)\n" +
-      "- currentCharges (number): starting pool; defaults to maxCharges if omitted\n" +
-      "- maxCharges is normalized to positive integer\n" +
-      "- currentCharges is clamped to 0..maxCharges\n" +
-      "- Charges restore to maxCharges on long rest by default\n" +
-      "- If the description contains the standalone word \"Persistent\" (case-insensitive), charges survive long rest and keep their current value\n" +
-      "- Existing weapons without \"Persistent\" in their description continue to restore normally\n" +
-      "- UI supports direct Cur/Max numeric editing, debounced typing, clamp hints, and +/- nudges\n" +
-      "\nIMPORT SAFETY / BEST PRACTICES FOR MODELS:\n" +
-      "- Always output uppercase stat keys\n" +
-      "- Prefer integer numbers for dice, bonuses, and charges\n" +
-      "- Do not include comments or trailing commas in JSON\n" +
-      "- When unsure, include both a clear description and explicit numeric fields\n" +
-      "- Keep type exactly \"weapon\" so importer routes it correctly\n" +
-      "\nSTRICT MINIMAL VALID OUTPUTS (USE WHEN YOU WANT THE SMALLEST SAFE JSON):\n" +
-      "- Minimal single-attack legacy:\n" +
-      "  {\"name\":\"Short Sword\",\"type\":\"weapon\",\"icon\":\"⚔\",\"die\":6,\"stat\":\"PHYS\"}\n" +
-      "- Minimal single-attack formula:\n" +
-      "  {\"name\":\"Formula Blade\",\"type\":\"weapon\",\"icon\":\"✦\",\"weaponFormula\":\"1d6 + PHYS\"}\n" +
-      "- Minimal multi-attack formula:\n" +
-      "  {\"name\":\"Twin Sigil\",\"type\":\"weapon\",\"icon\":\"✧\",\"attacks\":[{\"name\":\"Sigil Strike\",\"formula\":\"1d8 + INT\",\"description\":\"Focused arcane thrust.\"}]}\n" +
-      "- Minimal charge-enabled multi-attack:\n" +
-      "  {\"name\":\"Charge Wand\",\"type\":\"weapon\",\"icon\":\"⬡\",\"maxCharges\":5,\"attacks\":[{\"name\":\"Bolt\",\"formula\":\"1d6 + INT\",\"consumesCharge\":true}]}\n" +
-      "- Minimal Persistent charge-enabled weapon (survives long rest):\n" +
-      "  {\"name\":\"Persistent Charge Wand\",\"type\":\"weapon\",\"icon\":\"⬡\",\"maxCharges\":5,\"currentCharges\":2,\"attacks\":[{\"name\":\"Bolt\",\"formula\":\"1d6 + INT\",\"consumesCharge\":true}],\"description\":\"Persistent charges remain after a long rest.\"}\n",
-    template: [
-      {
-        name: "Simple Sword (Formula)",
-        type: "weapon",
-        slot: "head",
-        icon: "⚔",
-        weaponFormula: "2*PHYS + 4",
-        description: "A formula weapon in single-attack mode equipped in an armor slot (valid in current build).",
-      },
-      {
-        name: "Warden Pike (Legacy Single)",
-        type: "weapon",
-        slots: ["weapon1", "weapon2"],
-        die: 10,
-        stat: "PHYS",
-        damageBonus: 2,
-        extraDice: 1,
-        extraDie: 6,
-        extraDamage: 3,
-        healDie: 4,
-        healStat: "CON",
-        statBonus: { CON: 1 },
-        description: "Legacy mode example with compound stat, extra dice, and healing rider.",
-      },
-      {
-        name: "Spellblade",
-        type: "weapon",
-        slot: "accessory2",
-        icon: "✧",
-        maxCharges: 3,
-        currentCharges: 3,
-        statBonus: { PHYS: 2 },
-        acBonus: 2,
-        sacrificeRewards: [
-          { name: "Gold", amount: 25, description: "Gain 25 gold when this weapon is sacrificed." },
-          { name: "Ember Shard", amount: 1, description: "Used in ritual crafting." },
-        ],
-        attacks: [
-          { name: "Slash", die: 8, stat: "PHYS", damageBonus: 0, description: "Reliable melee strike." },
-          { name: "Arcane Strike", formula: "1d6 + PHYS + INT + 2", consumesCharge: true, description: "Charged slash infused with arcane force." },
-          { name: "Spellburst", die: 10, stat: "INT", damageBonus: 0, consumesCharge: true, description: "High-output ranged burst." },
-        ],
-        description: "Slash is free. Arcane Strike and Spellburst cost a charge. Grants +2 PHYS and +2 AC while equipped.",
-      },
-      {
-        name: "Battery Cannon (High Charges)",
-        type: "weapon",
-        slot: "weapon1",
-        icon: "⬡",
-        maxCharges: 200,
-        currentCharges: 150,
-        attacks: [
-          { name: "Pulse Shot", formula: "2d4 + INT", consumesCharge: true, description: "Standard capacitor discharge." },
-          { name: "Overdrive", formula: "3*(INT+PHYS) + 1d8", consumesCharge: true, description: "Burst fire mode that drains extra power." },
-          { name: "Buttstroke", die: 6, stat: "PHYS", damageBonus: 1, description: "Fallback melee strike that does not consume charge." },
-        ],
-        description: "High-capacity charge weapon showing large pools and mixed formula/legacy multi-attacks.",
-      },
-      {
-        name: "Persistent Relic Wand",
-        type: "weapon",
-        slot: "weapon2",
-        icon: "⬡",
-        maxCharges: 5,
-        currentCharges: 2,
-        attacks: [
-          { name: "Relic Bolt", formula: "1d6 + INT", consumesCharge: true, description: "Charges remain after a long rest." },
-        ],
-        description: "Persistent charges survive long rest and retain their current value.",
-      },
-    ],
-  };
-  const downloadWeaponTemplate = async () => {
-    try {
-      await navigator.clipboard.writeText(JSON.stringify(WEAPON_TEMPLATE, null, 2));
-    } catch {
-      const t = document.createElement("textarea");
-      t.value = JSON.stringify(WEAPON_TEMPLATE, null, 2);
-      document.body.appendChild(t);
-      t.select();
-      document.execCommand("copy");
-      document.body.removeChild(t);
-    }
-    setAdminOpen(false);
-  };
-
-  const downloadItemTemplate = downloadWeaponTemplate;
-
-  const downloadMonsterTemplate = async () => {
-    const payload = {
-      __instructions: MONSTER_TEMPLATE_INSTRUCTIONS,
-      template: MONSTER_TEMPLATE,
-    };
-    try {
-      await navigator.clipboard.writeText(JSON.stringify(payload, null, 2));
-    } catch {
-      const t = document.createElement("textarea");
-      t.value = JSON.stringify(payload, null, 2);
-      document.body.appendChild(t);
-      t.select();
-      document.execCommand("copy");
-      document.body.removeChild(t);
-    }
-    setAdminOpen(false);
-  };
-
-
-  const SHARED_CONTENT_TEMPLATE = {
-    __instructions: "Fields and semantics for scars / feats / abilities / spells:\n" +
-      "- Use a single payload with two sections: abilities and spells.\n" +
-      "- abilities accepts Scars, Feats, and Abilities with type (Feat|Scar|Ability).\n" +
-      "- spells accepts spell-like entries with isSpell: true and optional spell-specific fields.\n" +
-      "- For abilities, support tallyFormula, modifiers, and actions just like the existing ability importer.\n" +
-      "- An ability action with isHealing: true heals the caster for the rolled total (capped at max HP), logs as 'healing', and never triggers omnivamp. Omnivamp only applies to damage dealt; weapons with heal/healDie/healStat profiles bypass it.\n" +
-      "- Ability modifiers can target regular stats (PHYS, CON, INT, SOC, plus common aliases like STR, DEX, WIS, CHA, SOCIAL) and derived traits (AC/Armor, MR/Magic Resist, Speed, Omnivamp %).\n" +
-      "- Feat and ability modifiers for AC, MR, Speed, and Omnivamp now affect the character's actual derived combat values used by the sheet and damage mitigation logic. Omnivamp is character-wide and heals for that % of ALL damage dealt (standard rounding).\n" +
-      "- Armor and MR use stepped mitigation: 1:1 up to 3, then 2 defense per +1 mitigation (e.g. AC 5 absorbs 4 damage).\n" +
-      "- Scars and Feats can optionally define themeMode. The last visible Scar or Feat with themeMode wins.\n" +
-      "- themeMode supports accentColor, backgroundColor, textColor, emoji, emojiSize (small|medium|large or a number), and overlayOpacity (0 to 0.35).\n" +
-      "- Theme colors accept hex, rgb/rgba, hsl/hsla, or named CSS colors. Invalid values fall back safely.\n" +
-      "- For spells, support damageDie, damageStat, formula, statModifiers, slotCost, slotCostMax, and scaleDamageBySlots.\n" +
-      "- A spell can use just damageDie if you want a die-only effect with no extra stat bonus; damageStat is optional.\n" +
-      "- formula (string) overrides damageDie/damageStat when present, e.g. \"INT + PHYS + 2d6\"; supports the same dice/stat/arithmetic syntax as weaponFormula.\n" +
-      "\nBehavior implemented by the app:\n" +
-      "- Spells are stored as ability-like entries with isSpell: true so they can share the same data model.\n" +
-      "- If slotCostMax is absent, the spell uses the fixed slotCost. If slotCostMax is present, the player can choose a value between slotCost and slotCostMax.\n" +
-      "- Die-only spells still cast normally; when damageStat is absent, the roll is just the damage die result.\n" +
-      "- Theme Mode changes the page color treatment and displays the configured emoji prominently in a dedicated banner above the sheet, with smaller repeated accents that do not cover core controls.\n" +
-      "- An ability with no actions only shows as a \"Passive\" card in the Attacks panel if it also has NO modifiers — this keeps that panel from being cluttered by stat-boost-only entries\n" +
-      "- An ability with no actions but with modifiers (a stat-boost-only ability) still applies its modifiers automatically and still shows in the Scars & Feats list; it just does not get a redundant Attacks-panel card\n" +
-      "- Give an ability a narrative-only passive (no modifiers, e.g. Slow Falling) if you want it to appear as a Passive card in the Attacks panel\n" +
-      "\nCONTENT LOOKUP SHEET ROWS (single Payload per Key — no wrapper needed):\n" +
-      "- For a Content Lookup row that is only a scar/feat/ability, the Payload can be a single bare object: {\"name\":\"...\",\"type\":\"Feat\",\"description\":\"...\"}\n" +
-      "- For a Content Lookup row that is only a spell, the Payload can be a single bare object with a spell-identifying field (isSpell, damageDie, damageStat, slotCost, slotCostMax, or scaleDamageBySlots): {\"name\":\"Spark\",\"type\":\"Ability\",\"isSpell\":true,\"damageDie\":4,\"damageStat\":\"INT\",\"slotCost\":2,\"scaleDamageBySlots\":true}\n" +
-      "- Prefer bare objects (not the {abilities:[...],spells:[...]} wrapper) for single-entry Content Lookup rows — a {\"spells\":[...]} wrapper with no abilities key correctly imports zero abilities, but a bare object is simpler and avoids wrapper mistakes entirely.\n" +
-      "\nSTRICT MINIMAL VALID OUTPUTS:\n" +
-      "- Minimal shared payload:\n" +
-      "  {\"abilities\":[{\"name\":\"Veteran\",\"type\":\"Feat\",\"description\":\"...\"}],\"spells\":[{\"name\":\"Spark\",\"type\":\"Ability\",\"isSpell\":true,\"description\":\"Quick magical strike.\",\"damageDie\":4,\"damageStat\":\"INT\",\"slotCost\":2,\"scaleDamageBySlots\":true}]}\n" +
-      "- Minimal themed Scar:\n" +
-      "  {\"abilities\":[{\"name\":\"Frog-Touched\",\"type\":\"Scar\",\"description\":\"A profoundly amphibious curse.\",\"themeMode\":{\"accentColor\":\"#62b34f\",\"backgroundColor\":\"#102a16\",\"textColor\":\"#d9f5c8\",\"emoji\":\"🐸\",\"emojiSize\":\"large\",\"overlayOpacity\":0.12}}]}\n" +
-      "- Die-only example: {\"spells\":[{\"name\":\"Burst\",\"type\":\"Ability\",\"isSpell\":true,\"description\":\"A simple blast.\",\"damageDie\":12,\"slotCost\":2,\"scaleDamageBySlots\":true}]}\n" +
-      "- Formula example (formula takes priority over damageDie/damageStat when both present): {\"name\":\"Arcane Lance\",\"type\":\"Ability\",\"isSpell\":true,\"description\":\"A lance of raw force.\",\"formula\":\"INT + PHYS + 2d6\",\"slotCost\":3}\n" +
-      "- Healing spell (isHealing: true shows a Self/Ally target toggle; rolled value heals instead of dealing damage): {\"name\":\"Mend\",\"type\":\"Ability\",\"isSpell\":true,\"isHealing\":true,\"description\":\"Knit wounds shut.\",\"damageDie\":8,\"damageStat\":\"INT\",\"slotCost\":2}\n" +
-      "- Minimal bare single spell (ideal for a Content Lookup row): {\"name\":\"Spark\",\"type\":\"Ability\",\"isSpell\":true,\"description\":\"Quick magical strike.\",\"damageDie\":4,\"damageStat\":\"INT\",\"slotCost\":2,\"scaleDamageBySlots\":true}\n" +
-      "- Minimal bare single feat (ideal for a Content Lookup row): {\"name\":\"Veteran Instinct\",\"type\":\"Feat\",\"description\":\"A passive edge that sharpens your battlefield awareness.\"}\n",
-    template: {
-      abilities: [
+  // ─── Master Admin Template ────────────────────────────────────────────────
+  // Single unified reference for an LLM. Consolidates every supported field, formula
+  // rule, and content category (Items, Spells, Abilities/Scars/Feats, Monsters).
+  const MASTER_ADMIN_TEMPLATE = {
+    __instructions: [
+      "MASTER ADMIN TEMPLATE — Project Ambrosia content schema reference.",
+      "This document is the single source of truth for generating valid content JSON. It is written for an LLM. Follow the field rules exactly so entries paste/import with no manual fixes.",
+      "",
+      "═══════════════════════════════════════════════════════════════",
+      "GENERAL SYNTAX RULES",
+      "═══════════════════════════════════════════════════════════════",
+      "- Stat keys are ALWAYS uppercase: PHYS, CON, INT, SOC. Common aliases are normalized on import: STR/DEX→PHYS, WIS→INT, CHA/SOCIAL→SOC.",
+      "- Dice tokens use NdM syntax (N dice of M sides), e.g. 2d6, 1d8. Whole numbers only.",
+      "- Formula strings support +, -, *, /, parentheses, static numbers, stat tokens, and NdM dice. Valid: \"2*PHYS + 4\", \"(PHYS+INT)*2 + 1d4\", \"2d6 + INT\", \"floor(level/2)\".",
+      "- Formula helpers: floor(), ceil(), round(), and the variable \"level\" (character level) are available where noted.",
+      "- Compound stats: where a 'stat' field is used, you may sum multiple with '+', e.g. \"PHYS+INT\".",
+      "- Damage types are exactly: physical, magic, true. 'physical' is reduced by Armor, 'magic' by Magic Resist (MR), 'true' bypasses both.",
+      "- Mitigation is STEPPED (diminishing returns): defense ≤ 3 absorbs 1:1; each additional point of mitigation costs 2 defense. mitigation = def<=3 ? def : 3 + floor((def-3)/2). Damage taken = max(0, incoming - mitigation).",
+      "- Output STRICT JSON only: no comments, no trailing commas, no placeholders. Prefer integers for dice, bonuses, charges, HP, AC, MR.",
+      "- Google Sheet / Content Lookup rows use two columns: Key and Payload. Payload is a single bare JSON object (no wrapper) for one entry. Quote fields containing commas/newlines per RFC4180 CSV.",
+      "- The standalone word \"Passive\" in a description marks an entry/attack as Passive (display-only, consumes no action/charge/tally). The standalone word \"Persistent\" in a weapon description makes its charges survive a long rest.",
+      "",
+      "═══════════════════════════════════════════════════════════════",
+      "CATEGORY 1 — ITEMS / EQUIPMENT / WEAPONS / ARMOR / ACCESSORIES",
+      "═══════════════════════════════════════════════════════════════",
+      "REQUIRED: name (string), type (\"weapon\"|\"armor\"|\"accessory\"|\"consumable\").",
+      "TOP-LEVEL OPTIONAL FIELDS:",
+      "- icon (string): custom icon shown in inventory/detail cards.",
+      "- slot (string): preferred slot. Valid keys: head, chest, pants, boots, weapon1, weapon2, accessory1, accessory2, accessory3, accessory4.",
+      "- slots (string[]): if present, the item may ONLY be dropped into these slots (same keys).",
+      "- description (string).",
+      "- statBonus (object): { PHYS?, CON?, INT?, SOC? } numeric bonuses applied while equipped.",
+      "- speedBonus (number), acBonus (number), magicResistBonus (number): derived-trait bonuses while equipped.",
+      "- sacrificeRewards (array): [{ name, amount? (number|string), description? }].",
+      "- lookupKey (string): set automatically when fetched via Content Lookup; you may omit it.",
+      "ATTACK / DAMAGE FIELDS (any item may carry weapon-style fields):",
+      "- SINGLE-ATTACK MODE (no attacks array): die (number sides), stat (stat key/compound), damageBonus (number), weaponFormula (string, overrides die/stat), extraDice (number), extraDie (number sides), extraDamage (number).",
+      "- HEALING RIDER (single-attack mode): heal (flat number), healDie (number), healStat (PHYS|CON|INT|SOC). Items with a heal profile BYPASS omnivamp on their rolls.",
+      "- omnivamp (number): % of ALL damage the wielder deals returned as healing (standard rounding). Character-wide, sums across equipped items and abilities. Only applies to damage dealt, never to healing.",
+      "- MULTI-ATTACK MODE: attacks: [{ name, die?, stat?, formula?, damageBonus?, consumesCharge?, description? }]. Each attack needs formula OR (die AND stat); formula wins if both present. consumesCharge:true spends 1 weapon charge per use.",
+      "CHARGE SYSTEM (per item instance):",
+      "- maxCharges (number, positive int): total pool (large pools OK, e.g. 200).",
+      "- currentCharges (number): starting pool; defaults to maxCharges; clamped to 0..maxCharges.",
+      "- Charges restore to max on long rest UNLESS description contains \"Persistent\".",
+      "UI RULES:",
+      "- An item with no attack profile (no attacks/weaponFormula/die+stat) shows as a Passive card only if it ALSO has no acBonus/magicResistBonus/speedBonus/statBonus; otherwise it is hidden from the Attacks panel (bonuses still apply) unless its description contains the standalone word Passive.",
+      "",
+      "═══════════════════════════════════════════════════════════════",
+      "CATEGORY 2 — SPELLS",
+      "═══════════════════════════════════════════════════════════════",
+      "Spells are ability-like entries with isSpell:true. REQUIRED: name, type:\"Ability\", isSpell:true.",
+      "OPTIONAL FIELDS:",
+      "- damageDie (number): die rolled for the spell's effect.",
+      "- damageStat (PHYS|CON|INT|SOC): optional stat bonus added to the roll.",
+      "- formula (string): overrides damageDie/damageStat when present.",
+      "- slotCost (number, ≥1): fixed slots consumed. Default 1.",
+      "- slotCostMax (number, ≥slotCost): if present, the player may spend slotCost..slotCostMax slots.",
+      "- scaleDamageBySlots (boolean): if true, the roll is repeated once per slot actually spent (scaling dice).",
+      "- statModifiers (array): [{ label, value }] small badges shown on the card.",
+      "- isHealing (boolean): if true, the rolled value RESTORES HP instead of dealing damage, shows a Self/Ally target toggle, and never triggers omnivamp. Self caps at max HP; Ally only logs the amount for manual application.",
+      "BEHAVIOR: casting consumes slots first. If slotCostMax is absent the spell uses fixed slotCost. Die-only spells (no damageStat) roll just the die.",
+      "",
+      "═══════════════════════════════════════════════════════════════",
+      "CATEGORY 3 — FEATS, SCARS & ABILITIES",
+      "═══════════════════════════════════════════════════════════════",
+      "REQUIRED: name, type (\"Feat\"|\"Scar\"|\"Ability\"), description.",
+      "OPTIONAL FIELDS:",
+      "- tally ({ total:number, used:number }): static use pool.",
+      "- tallyFormula (string): dynamic use pool evaluated from level/stats, e.g. \"level\", \"floor(level/2)\", \"level + INT\". Overrides tally.total.",
+      "- modifiers (array): [{ label, value }]. label targets a stat (PHYS|CON|INT|SOC or alias) OR a derived trait: AC/Armor, MR/Magic Resist, Speed, Omnivamp. value is a number string or a formula (\"+1\", \"2\", \"floor(level/4)\"). These feed real derived combat values.",
+      "- actions (array): [{ name, die?, stat?, formula?, damageBonus?, consumesTally?, isHealing?, description? }]. Each action needs formula OR (die AND stat). consumesTally:true spends 1 tally use. isHealing:true heals the caster (capped at max HP), logs as 'healing', and bypasses omnivamp.",
+      "- themeMode (object): Scars/Feats only. { accentColor?, backgroundColor?, textColor?, emoji?, emojiSize? (\"small\"|\"medium\"|\"large\"|number px 24-240), overlayOpacity? (0-0.35) }. Colors accept hex/rgb(a)/hsl(a)/named. The last visible themed Scar/Feat wins; emoji shows in a banner above the sheet.",
+      "PASSIVE RULES: an ability with no actions and no modifiers shows as a Passive card. An ability with modifiers but no actions applies them automatically and appears in the Scars & Feats list (no Attacks-panel card).",
+      "",
+      "═══════════════════════════════════════════════════════════════",
+      "CATEGORY 4 — MONSTERS / ENCOUNTER DEFINITIONS",
+      "═══════════════════════════════════════════════════════════════",
+      "Monsters are TS definition files under src/app/monsters/definitions/ implementing MonsterDefinition. Keep stable string ids so encounter saves stay predictable.",
+      "REQUIRED: id, name, cr (string), stats {PHYS,CON,INT,SOC}, hp, ac, mr, speed, attacks[], activeAbilities[], passiveAbilities[].",
+      "OPTIONAL: resourcePools: [{ id, name, current, max }], tags: string[].",
+      "RollFormula (used by attacks, abilities, effects): { diceCount, diceSides, stat? (PHYS|CON|INT|SOC), flatBonus?, minTotal? }. minTotal floors the final total.",
+      "attacks[] (RollableAttack): { id, name, formula, damageType? (physical|magic|true), omnivamp? (% self-heal, standard rounding), description?, effects? }.",
+      "activeAbilities[] (ActiveAbility): { id, name, target (\"player\"|\"self\"|\"ally\"|\"none\"), formula?, damageType?, effects?, cooldownTurns?, maxCharges?, resourceCost? { resourceId, amount }, description? }.",
+      "passiveAbilities[] (PassiveAbility): { id, name, trigger, description?, effects[] }. trigger enum: encounter_start, turn_start, on_attack_hit, on_damaged, on_threshold, on_defeated (aliases attack/hit→on_attack_hit, death→on_defeated, damage_taken→on_damaged).",
+      "effects[] (MonsterEffect): { type (\"damage\"|\"heal_self\"|\"resource_gain\"|\"note\"), formula?, damageType?, resourceId?, note? }. 'damage'/'heal_self' roll formula; 'resource_gain' adds to resourcePools[resourceId]; 'note' logs text.",
+      "Monster self-resistance (applyDamageTypeResistance) uses the same STEPPED mitigation as players (AC vs physical, MR vs magic, true bypasses).",
+      "",
+      "═══════════════════════════════════════════════════════════════",
+      "IMPORT ROUTES SUMMARY",
+      "═══════════════════════════════════════════════════════════════",
+      "- Items: single object or array → Paste Item JSON / Content Lookup row Payload.",
+      "- Shared content (abilities+spells): { abilities:[...], spells:[...] } → Paste Shared Content JSON. A Content Lookup row may be a single bare ability or bare spell object.",
+      "- Monsters: edited as code definitions, not pasted at runtime.",
+    ].join("\n"),
+    examples: {
+      items: [
+        { name: "Short Sword", type: "weapon", icon: "⚔", die: 6, stat: "PHYS" },
+        { name: "Formula Blade", type: "weapon", icon: "✦", weaponFormula: "1d6 + PHYS" },
         {
-          name: "Veteran Instinct",
-          type: "Feat",
-          description: "A passive edge that sharpens your battlefield awareness.",
+          name: "Spellblade",
+          type: "weapon",
+          slot: "weapon1",
+          icon: "✧",
+          maxCharges: 3,
+          currentCharges: 3,
+          statBonus: { PHYS: 2 },
+          acBonus: 2,
+          attacks: [
+            { name: "Slash", die: 8, stat: "PHYS", description: "Reliable melee strike." },
+            { name: "Arcane Strike", formula: "1d6 + PHYS + INT + 2", consumesCharge: true, description: "Charged slash." },
+          ],
+          sacrificeRewards: [{ name: "Gold", amount: 25, description: "Gain 25 gold when sacrificed." }],
+          description: "Slash is free; Arcane Strike costs a charge. Grants +2 PHYS and +2 AC while equipped.",
         },
+        {
+          name: "Warden Pike",
+          type: "weapon",
+          slots: ["weapon1", "weapon2"],
+          die: 10,
+          stat: "PHYS",
+          damageBonus: 2,
+          extraDice: 1,
+          extraDie: 6,
+          healDie: 4,
+          healStat: "CON",
+          description: "Legacy single-attack with extra dice and a healing rider (heals bypass omnivamp).",
+        },
+        {
+          name: "Persistent Relic Wand",
+          type: "weapon",
+          icon: "⬡",
+          maxCharges: 5,
+          currentCharges: 2,
+          attacks: [{ name: "Relic Bolt", formula: "1d6 + INT", consumesCharge: true }],
+          description: "Persistent charges survive long rest.",
+        },
+        { name: "Leather Tunic", type: "armor", slot: "chest", acBonus: 2, description: "A simple leather chest piece." },
+        { name: "Boots of Haste", type: "armor", slot: "boots", speedBonus: 2, description: "Passive: You move with unnatural quickness." },
+      ],
+      abilities: [
+        { name: "Veteran Instinct", type: "Feat", description: "A passive edge that sharpens battlefield awareness." },
         {
           name: "Frog-Touched",
           type: "Scar",
           description: "A profoundly amphibious curse.",
-          themeMode: {
-            accentColor: "#62b34f",
-            backgroundColor: "#102a16",
-            textColor: "#d9f5c8",
-            emoji: "🐸",
-            emojiSize: "large",
-            overlayOpacity: 0.12,
-          },
+          themeMode: { accentColor: "#62b34f", backgroundColor: "#102a16", textColor: "#d9f5c8", emoji: "🐸", emojiSize: "large", overlayOpacity: 0.12 },
         },
         {
-          name: "Ability Name",
-          type: "Feat",
-          description: "Describe what this ability does.",
+          name: "Battle Focus",
+          type: "Ability",
+          description: "Channel precision into a strike.",
           tallyFormula: "floor(level/2)",
           modifiers: [
             { label: "CON", value: "floor(level/4)" },
             { label: "AC", value: "1" },
-            { label: "Magic Resist", value: "2" },
-            { label: "Speed", value: "1" },
+            { label: "Omnivamp", value: "10" },
           ],
           actions: [
-            { name: "Precision Burst", formula: "1d8 + PHYS + INT", consumesTally: true, description: "A focused strike that blends steel and spellwork." },
+            { name: "Precision Burst", formula: "1d8 + PHYS + INT", consumesTally: true, description: "A focused strike." },
+            { name: "Second Wind", die: 4, stat: "PHYS", isHealing: true, description: "Catch your breath and recover." },
           ],
         },
       ],
       spells: [
-        {
-          name: "Spell Name",
-          type: "Ability",
-          isSpell: true,
-          description: "Describe what this spell does.",
-          damageDie: 6,
-          damageStat: "INT",
-          slotCost: 2,
-          slotCostMax: 3,
-          scaleDamageBySlots: true,
-          statModifiers: [{ label: "PHYS", value: "+1" }],
-        },
+        { name: "Spark", type: "Ability", isSpell: true, description: "Quick magical strike.", damageDie: 4, damageStat: "INT", slotCost: 2, scaleDamageBySlots: true },
+        { name: "Burst", type: "Ability", isSpell: true, description: "A simple blast.", damageDie: 12, slotCost: 2, scaleDamageBySlots: true },
+        { name: "Arcane Lance", type: "Ability", isSpell: true, description: "A lance of raw force.", formula: "INT + PHYS + 2d6", slotCost: 3 },
+        { name: "Mend", type: "Ability", isSpell: true, isHealing: true, description: "Knit wounds shut.", damageDie: 8, damageStat: "INT", slotCost: 2 },
       ],
+      monster: {
+        id: "template-monster",
+        name: "Template Monster",
+        cr: "1",
+        stats: { PHYS: 6, CON: 3, INT: 4, SOC: 1 },
+        hp: 18,
+        ac: 2,
+        mr: 1,
+        speed: 5,
+        attacks: [
+          {
+            id: "template-strike",
+            name: "Template Strike",
+            formula: { diceCount: 1, diceSides: 8, stat: "PHYS", flatBonus: 0 },
+            damageType: "physical",
+            description: "Baseline attack that scales with PHYS.",
+          },
+          {
+            id: "template-draining-bite",
+            name: "Draining Bite",
+            formula: { diceCount: 1, diceSides: 6, stat: "PHYS" },
+            damageType: "physical",
+            omnivamp: 50,
+            description: "Heals self for 50% of damage dealt.",
+          },
+        ],
+        activeAbilities: [
+          {
+            id: "template-burst",
+            name: "Template Burst",
+            target: "player",
+            cooldownTurns: 2,
+            maxCharges: 2,
+            formula: { diceCount: 1, diceSides: 6, stat: "INT", flatBonus: 1 },
+            damageType: "magic",
+            description: "Reusable ability with cooldown and charges.",
+          },
+        ],
+        passiveAbilities: [
+          {
+            id: "template-regen",
+            name: "Regeneration",
+            trigger: "turn_start",
+            description: "Regenerates at the start of its turn.",
+            effects: [{ type: "heal_self", formula: { diceCount: 1, diceSides: 4 }, note: "Regenerates wounds." }],
+          },
+        ],
+        resourcePools: [{ id: "fury", name: "Fury", current: 0, max: 10 }],
+        tags: ["template"],
+      },
     },
   };
 
-  const downloadSharedContentTemplate = async () => {
-    try {
-      await navigator.clipboard.writeText(JSON.stringify(SHARED_CONTENT_TEMPLATE, null, 2));
-    } catch {
-      const t = document.createElement("textarea");
-      t.value = JSON.stringify(SHARED_CONTENT_TEMPLATE, null, 2);
-      document.body.appendChild(t);
-      t.select();
-      document.execCommand("copy");
-      document.body.removeChild(t);
-    }
+  const copyMasterTemplate = () => {
+    copyJsonToClipboard(MASTER_ADMIN_TEMPLATE, "Master Template");
     setAdminOpen(false);
   };
 
@@ -3214,6 +3160,13 @@ export default function App() {
                     <span className="text-xs uppercase tracking-widest" style={{ color: "#6a5a3a", fontFamily: "'Cinzel', serif" }}>Items</span>
                   </div>
                   <button
+                    onClick={copyMasterTemplate}
+                    className="text-left px-4 py-2.5 text-sm font-semibold hover:opacity-80 transition-opacity"
+                    style={{ fontFamily: "'Crimson Pro', serif", color: "#c4853a", background: "rgba(196,133,58,0.08)", border: "none", cursor: "pointer", borderBottom: "1px solid rgba(196,133,58,0.15)" }}
+                  >
+                    ⬇ Copy Master Template
+                  </button>
+                  <button
                     onClick={() => { setFightMenuOpen(true); setAdminOpen(false); }}
                     className="text-left px-4 py-2.5 text-sm hover:opacity-80 transition-opacity"
                     style={{ fontFamily: "'Crimson Pro', serif", color: "#e2cfa0", background: "none", border: "none", cursor: "pointer" }}
@@ -3233,36 +3186,15 @@ export default function App() {
                   </button>
                   <div style={{ borderTop: "1px solid rgba(196,133,58,0.1)", margin: "4px 0" }} />
                   <button
-                    onClick={downloadItemTemplate}
-                    className="text-left px-4 py-2.5 text-sm hover:opacity-80 transition-opacity"
-                    style={{ fontFamily: "'Crimson Pro', serif", color: "#e2cfa0", background: "none", border: "none", cursor: "pointer" }}
-                  >
-                    Copy Item Template
-                  </button>
-                  <button
                     onClick={() => { setItemImportText(""); setLoadItemOpen(true); setAdminOpen(false); }}
                     className="text-left px-4 py-2.5 text-sm hover:opacity-80 transition-opacity"
                     style={{ fontFamily: "'Crimson Pro', serif", color: "#e2cfa0", background: "none", border: "none", cursor: "pointer" }}
                   >
                     Paste Item JSON
                   </button>
-                  <button
-                    onClick={downloadMonsterTemplate}
-                    className="text-left px-4 py-2.5 text-sm hover:opacity-80 transition-opacity"
-                    style={{ fontFamily: "'Crimson Pro', serif", color: "#e2cfa0", background: "none", border: "none", cursor: "pointer" }}
-                  >
-                    Copy Monster Template
-                  </button>
                   <div className="px-4 py-2 mt-1" style={{ borderTop: "1px solid rgba(196,133,58,0.08)" }}>
                     <span className="text-xs uppercase tracking-widest" style={{ color: "#6a5a3a", fontFamily: "'Cinzel', serif" }}>Scars, Feats & Spells</span>
                   </div>
-                  <button
-                    onClick={downloadSharedContentTemplate}
-                    className="text-left px-4 py-2.5 text-sm hover:opacity-80 transition-opacity"
-                    style={{ fontFamily: "'Crimson Pro', serif", color: "#e2cfa0", background: "none", border: "none", cursor: "pointer" }}
-                  >
-                    Copy Shared Content Template
-                  </button>
                   <button
                     onClick={() => { setImportJsonText(""); setImportJsonOpen(true); setAdminOpen(false); }}
                     className="text-left px-4 py-2.5 text-sm hover:opacity-80 transition-opacity"
