@@ -47,6 +47,7 @@ interface AbilityAction {
   formula?: string;
   damageBonus?: number;
   consumesTally?: boolean; // if true, spends 1 tally use when action succeeds
+  isHealing?: boolean; // if true, the roll heals the caster and bypasses omnivamp
   description?: string;
 }
 
@@ -89,6 +90,7 @@ interface Spell extends Ability {
   slotCost?: number;
   slotCostMax?: number;
   scaleDamageBySlots?: boolean;
+  isHealing?: boolean; // healing spell: rolled value restores HP instead of dealing damage
 }
 
 interface SacrificeReward {
@@ -309,12 +311,21 @@ const STAT_DESCRIPTIONS: Record<StatKey, string> = {
 };
 
 const SECONDARY_DESCRIPTIONS: Record<string, string> = {
-  physAC:      "Armor — mitigates physical damage 1 to 1. Each point of Armor absorbs one point of incoming physical damage before it reaches your HP.",
-  magicResist: "Magic Resist — mitigates magical damage 1 to 1. Each point absorbs one point of incoming magic damage before it reaches your HP.",
+  physAC:      "Armor — reduces physical damage. The first 3 Armor absorb 1 damage each; every 2 Armor beyond that absorbs 1 more. Damage taken can't drop below 0.",
+  magicResist: "Magic Resist — reduces magic damage. The first 3 MR absorb 1 damage each; every 2 MR beyond that absorbs 1 more. Damage taken can't drop below 0.",
   Initiative:  "Initiative — equals your PHYS score. Determines who acts first when combat begins.",
   Speed:       "Speed — base movement. Fighter starts at 3, Wizard starts at 2, then increases from boots and other gear. Used by the DM to determine range.",
-  Omnivamp:    "Omnivamp — heals you for that % of ALL damage you deal (rounded up). Total from your equipped items and abilities.",
+  Omnivamp:    "Omnivamp — heals you for that % of ALL damage you deal (standard rounding). Total from your equipped items and abilities.",
 };
+
+// Stepped, diminishing-returns mitigation: 1:1 up to 3 defense, then 2 defense per +1 mitigation.
+// Applies to both Armor (vs physical) and MR (vs magic). All values are clean integers.
+const computeMitigation = (defense: number): number => {
+  const def = Math.max(0, Math.floor(defense));
+  return def <= 3 ? def : 3 + Math.floor((def - 3) / 2);
+};
+const applyMitigation = (incoming: number, defense: number): number =>
+  Math.max(0, Math.floor(incoming) - computeMitigation(defense));
 
 const EQUIP_SLOTS: { key: EquipSlot; label: string; accepts: ItemType[] }[] = [
   { key: "head",    label: "Head",    accepts: ["weapon", "armor", "accessory"] },
@@ -636,6 +647,7 @@ export default function App() {
   const [importSpellJsonText, setImportSpellJsonText] = useState("");
   const [importSpellJsonOpen, setImportSpellJsonOpen] = useState(false);
   const [spellSlotSelections, setSpellSlotSelections] = useState<Record<number, number>>({});
+  const [spellTargetSelections, setSpellTargetSelections] = useState<Record<number, "self" | "ally">>({});
   const [characterLoadJsonText, setCharacterLoadJsonText] = useState("");
   const [characterLoadJsonOpen, setCharacterLoadJsonOpen] = useState(false);
   const [deleteSpellsOpen, setDeleteSpellsOpen] = useState(false);
@@ -665,6 +677,10 @@ export default function App() {
   const [damageInput, setDamageInput] = useState("");
   const [healInput, setHealInput] = useState("");
   const [damageType, setDamageType] = useState<"physical" | "magic" | "true">("physical");
+
+  // ─── Monster damage intake (per-monster) ─────────────────────────────────
+  const [monsterDamageInputs, setMonsterDamageInputs] = useState<Record<string, string>>({});
+  const [monsterDamageTypes, setMonsterDamageTypes] = useState<Record<string, "physical" | "magic" | "true">>({});
 
   // ─── Combat action tracker ────────────────────────────────────────────────
   const [actionUsedSlots, setActionUsedSlots] = useState<boolean[]>([false]);
@@ -770,6 +786,7 @@ export default function App() {
       importSpellJsonText,
       importSpellJsonOpen,
       spellSlotSelections,
+      spellTargetSelections,
       characterLoadJsonText,
       characterLoadJsonOpen,
       selectedItem,
@@ -868,6 +885,7 @@ export default function App() {
       ...(spell?.slotCost !== undefined ? { slotCost: Math.max(1, Number(spell.slotCost) || 1) } : {}),
       ...(spell?.slotCostMax !== undefined ? { slotCostMax: Math.max(1, Number(spell.slotCostMax) || 1) } : {}),
       ...(spell?.scaleDamageBySlots !== undefined ? { scaleDamageBySlots: Boolean(spell.scaleDamageBySlots) } : {}),
+      ...(spell?.isHealing !== undefined ? { isHealing: Boolean(spell.isHealing) } : {}),
     });
 
     const normalizeJournalEntries = (raw: any): JournalEntry[] => {
@@ -975,6 +993,7 @@ export default function App() {
     if (d.nextAbilityId !== undefined) setNextAbilityId(d.nextAbilityId);
     if (d.wizardSpellSlots !== undefined) setWizardSpellSlots(d.wizardSpellSlots);
     if (d.spellSlotSelections !== undefined) setSpellSlotSelections(d.spellSlotSelections);
+    if (d.spellTargetSelections !== undefined) setSpellTargetSelections(d.spellTargetSelections);
     if (d.spells !== undefined) {
       const loadedSpells = Array.isArray(d.spells) ? d.spells : [];
       setSpells(loadedSpells.map((spell: Spell) => normalizeLoadedSpell(spell)));
@@ -1136,10 +1155,11 @@ export default function App() {
       }
     } catch (e) {}
 
-    const resistance = type === "physical" ? ac : magicResist;
+    const defense = type === "physical" ? ac : magicResist;
     const typeLabel = type === "physical" ? "Physical" : "Magic";
-    const afterResistance = Math.max(0, raw - resistance);
-    const resistanceLabel = resistance > 0 ? ` − ${resistance} ${typeLabel === "Physical" ? "AC" : "MR"} = ${afterResistance}` : "";
+    const mitigation = computeMitigation(defense);
+    const afterResistance = applyMitigation(raw, defense);
+    const resistanceLabel = mitigation > 0 ? ` − ${mitigation} ${typeLabel === "Physical" ? "AC" : "MR"} = ${afterResistance}` : "";
 
     adjustHp(-afterResistance);
     addLog(`${typeLabel}: ${raw}${resistanceLabel} damage taken.`, afterResistance > 0 ? "hit" : "miss");
@@ -1413,19 +1433,26 @@ export default function App() {
     };
   }, []);
 
-  // Heals the attacker for a % of damage dealt (always rounds up), applied directly without its own log entry.
+  // Heals the attacker for a % of damage dealt (standard rounding), applied directly without its own log entry.
+  // Returns the actual HP restored (0 if the roll rounds to 0 or HP is already at max), so callers only
+  // surface the omnivamp suffix when healing truly occurs.
   const applyOmnivampHeal = (damageDealt: number): number => {
     const pct = omnivamp;
     if (damageDealt <= 0 || pct <= 0) return 0;
-    const heal = Math.ceil((damageDealt * pct) / 100);
+    const heal = Math.round((damageDealt * pct) / 100);
+    if (heal <= 0) return 0;
     const cur = typeof currentHp === "number" ? currentHp : 0;
     const max = typeof maxHp === "number" ? maxHp : 0;
-    setCurrentHp(Math.max(0, Math.min(max || Infinity, cur + heal)));
-    return heal;
+    const cap = max || Infinity;
+    const next = Math.max(0, Math.min(cap, cur + heal));
+    const actualHeal = next - cur;
+    if (actualHeal <= 0) return 0;
+    setCurrentHp(next);
+    return actualHeal;
   };
 
-  const applyDamage = (raw: number, label: string) => {
-    const heal = applyOmnivampHeal(raw);
+  const applyDamage = (raw: number, label: string, opts?: { skipOmnivamp?: boolean }) => {
+    const heal = opts?.skipOmnivamp ? 0 : applyOmnivampHeal(raw);
     const healSuffix = heal > 0 ? ` • omnivamp ${omnivamp}% heals ${heal} HP` : "";
     addLog(`${label} — ${raw} damage dealt${healSuffix}`, raw > 0 ? "hit" : "miss");
   };
@@ -1473,6 +1500,9 @@ export default function App() {
 
   const doWeaponAttack = (item: InventoryItem, atkIdx?: number) => {
     const chargedItem = normalizeWeaponCharges(item);
+    // Weapons with a healing profile bypass omnivamp entirely on their rolls.
+    const healProfile = chargedItem.heal !== undefined || chargedItem.healDie !== undefined || chargedItem.healStat !== undefined;
+    const dmgOpts = healProfile ? { skipOmnivamp: true } : undefined;
 
     // ── multi-attack path ──────────────────────────────────────────────────────────
     if (chargedItem.attacks && chargedItem.attacks.length > 0) {
@@ -1492,7 +1522,7 @@ export default function App() {
       if (formula) {
         const outcome = evaluateWeaponFormula(formula, effectiveStats);
         if (outcome.ok) {
-          applyDamage(outcome.total, `⚔ ${chargedItem.name} — ${atk.name} (${outcome.detail})`);
+          applyDamage(outcome.total, `⚔ ${chargedItem.name} — ${atk.name} (${outcome.detail})`, dmgOpts);
           return;
         }
       }
@@ -1509,7 +1539,7 @@ export default function App() {
       const detail = bonus > 0
         ? `${roll} + ${atk.stat}(${sv}) + ${bonus}`
         : `${roll} + ${atk.stat}(${sv})`;
-      applyDamage(total, `⚔ ${chargedItem.name} — ${atk.name} (${detail})`);
+      applyDamage(total, `⚔ ${chargedItem.name} — ${atk.name} (${detail})`, dmgOpts);
       return;
     }
 
@@ -1525,7 +1555,7 @@ export default function App() {
     if (formula) {
       const outcome = evaluateWeaponFormula(formula, effectiveStats);
       if (outcome.ok) {
-        applyDamage(outcome.total, `⚔ ${chargedItem.name} (${outcome.detail})`);
+        applyDamage(outcome.total, `⚔ ${chargedItem.name} (${outcome.detail})`, dmgOpts);
         applyWeaponHealing(chargedItem);
         return;
       }
@@ -1554,7 +1584,7 @@ export default function App() {
       detailParts.push(`+${chargedItem.extraDamage}`);
     }
 
-    applyDamage(total, `⚔ ${chargedItem.name} (${detailParts.join(" + ")})`);
+    applyDamage(total, `⚔ ${chargedItem.name} (${detailParts.join(" + ")})`, dmgOpts);
     applyWeaponHealing(chargedItem);
   };
 
@@ -1624,7 +1654,15 @@ export default function App() {
     }
 
     if (hasRollResult) {
-      applyDamage(total, `✦ ${ability.name} — ${action.name} (${detail})`);
+      if (action.isHealing) {
+        // Healing action: restore HP to the caster, no omnivamp, healing wording.
+        const cur = typeof currentHp === "number" ? currentHp : 0;
+        const max = typeof maxHp === "number" ? maxHp : 0;
+        setCurrentHp(Math.max(0, Math.min(max || Infinity, cur + total)));
+        addLog(`✦ ${ability.name} — ${action.name} (${detail}) — ${total} healing`, "heal");
+      } else {
+        applyDamage(total, `✦ ${ability.name} — ${action.name} (${detail})`);
+      }
     } else {
       addLog(
         `✦ ${ability.name} — ${action.name}${action.description ? `: ${action.description}` : ""}`,
@@ -2174,7 +2212,7 @@ export default function App() {
   const monsterAttackPlayer = (monster: CombatMonster, attack: MonsterAttack, player: CombatPlayer) => {
     const resolved = resolveMonsterAttack(monster.def, monster.runtime, attack);
     const raw = resolved.damage;
-    logCombat(`${relabelLog(monster, resolved.logLine)} → ${player.name}`);
+    logCombat(relabelLog(monster, resolved.logLine));
     resolved.effectLines.forEach((line) => logCombat(relabelLog(monster, line)));
     setCombatMonsters((prev) =>
       prev.map((entry) => (entry.uid === monster.uid
@@ -2184,6 +2222,18 @@ export default function App() {
     setCombatPlayers((prev) =>
       prev.map((p) => p.uid === player.uid ? { ...p, currentHp: Math.max(0, p.currentHp - raw) } : p)
     );
+  };
+
+  const applyMonsterIncomingDamage = (monster: CombatMonster, raw: number, type: "physical" | "magic" | "true") => {
+    const defense = type === "physical" ? monster.def.ac : type === "magic" ? monster.def.mr : 0;
+    const mitigation = type === "true" ? 0 : computeMitigation(defense);
+    const net = type === "true" ? Math.max(0, Math.floor(raw)) : applyMitigation(raw, defense);
+    setCombatMonsters((prev) =>
+      prev.map((m) => (m.uid === monster.uid ? { ...m, currentHp: Math.max(0, m.currentHp - net) } : m)),
+    );
+    const typeLabel = type === "physical" ? "Physical" : type === "magic" ? "Magic" : "True";
+    const reduction = mitigation > 0 ? ` − ${mitigation} ${type === "physical" ? "AC" : "MR"} = ${net}` : "";
+    logCombat(`${monster.displayName}: ${net} ${typeLabel} damage taken (${raw}${reduction}).`);
   };
 
   const triggerMonsterTurnStart = (monsterUid: string) => {
@@ -2224,7 +2274,6 @@ export default function App() {
       setCombatPlayers((prev) => {
         const target = prev.find((player) => player.currentHp > 0) ?? prev[0];
         if (!target) return prev;
-        logCombat(`${target.name} takes ${resolved.damage} damage from ${ability.name}.`);
         return prev.map((player) =>
           player.uid === target.uid ? { ...player, currentHp: Math.max(0, player.currentHp - resolved.damage) } : player,
         );
@@ -2269,7 +2318,7 @@ export default function App() {
   const startWizardSignatureSpell = () => {
     setWizardSignatureSpellAcknowledged(true);
     setWizardSignatureSpellPromptOpen(false);
-    addLog("Signature Spell — the signature spell menu is ready for your next choice.", "info");
+    addLog("Signature Spell — reach out to the DM to brainstorm ideas, establish its mechanics, or ask any questions.", "info");
   };
 
   const useCounterspell = () => {
@@ -2378,7 +2427,7 @@ export default function App() {
       "- Formula field: weaponFormula (string)\n" +
       "- If weaponFormula is present, it overrides legacy damage fields for damage calc.\n" +
       "- heal (number), healDie (number), healStat (PHYS|CON|INT|SOC) are supported in this mode.\n" +
-      "- omnivamp (number) on any equipped item adds to your character-wide omnivamp %, healing you for that % of ALL damage you deal, rounded up.\n" +
+      "- omnivamp (number) on any equipped item adds to your character-wide omnivamp %, healing you for that % of ALL damage you deal (standard rounding).\n" +
       "\nMULTI-ATTACK DAMAGE MODE (attacks array present):\n" +
       "- attacks: [{ name, die?, stat?, formula?, damageBonus?, consumesCharge?, description? }]\n" +
       "- Each attack must include either formula OR (die and stat).\n" +
@@ -2529,8 +2578,10 @@ export default function App() {
       "- abilities accepts Scars, Feats, and Abilities with type (Feat|Scar|Ability).\n" +
       "- spells accepts spell-like entries with isSpell: true and optional spell-specific fields.\n" +
       "- For abilities, support tallyFormula, modifiers, and actions just like the existing ability importer.\n" +
+      "- An ability action with isHealing: true heals the caster for the rolled total (capped at max HP), logs as 'healing', and never triggers omnivamp. Omnivamp only applies to damage dealt; weapons with heal/healDie/healStat profiles bypass it.\n" +
       "- Ability modifiers can target regular stats (PHYS, CON, INT, SOC, plus common aliases like STR, DEX, WIS, CHA, SOCIAL) and derived traits (AC/Armor, MR/Magic Resist, Speed, Omnivamp %).\n" +
-      "- Feat and ability modifiers for AC, MR, Speed, and Omnivamp now affect the character's actual derived combat values used by the sheet and damage mitigation logic. Omnivamp is character-wide and heals for that % of ALL damage dealt (rounded up).\n" +
+      "- Feat and ability modifiers for AC, MR, Speed, and Omnivamp now affect the character's actual derived combat values used by the sheet and damage mitigation logic. Omnivamp is character-wide and heals for that % of ALL damage dealt (standard rounding).\n" +
+      "- Armor and MR use stepped mitigation: 1:1 up to 3, then 2 defense per +1 mitigation (e.g. AC 5 absorbs 4 damage).\n" +
       "- Scars and Feats can optionally define themeMode. The last visible Scar or Feat with themeMode wins.\n" +
       "- themeMode supports accentColor, backgroundColor, textColor, emoji, emojiSize (small|medium|large or a number), and overlayOpacity (0 to 0.35).\n" +
       "- Theme colors accept hex, rgb/rgba, hsl/hsla, or named CSS colors. Invalid values fall back safely.\n" +
@@ -2556,6 +2607,7 @@ export default function App() {
       "  {\"abilities\":[{\"name\":\"Frog-Touched\",\"type\":\"Scar\",\"description\":\"A profoundly amphibious curse.\",\"themeMode\":{\"accentColor\":\"#62b34f\",\"backgroundColor\":\"#102a16\",\"textColor\":\"#d9f5c8\",\"emoji\":\"🐸\",\"emojiSize\":\"large\",\"overlayOpacity\":0.12}}]}\n" +
       "- Die-only example: {\"spells\":[{\"name\":\"Burst\",\"type\":\"Ability\",\"isSpell\":true,\"description\":\"A simple blast.\",\"damageDie\":12,\"slotCost\":2,\"scaleDamageBySlots\":true}]}\n" +
       "- Formula example (formula takes priority over damageDie/damageStat when both present): {\"name\":\"Arcane Lance\",\"type\":\"Ability\",\"isSpell\":true,\"description\":\"A lance of raw force.\",\"formula\":\"INT + PHYS + 2d6\",\"slotCost\":3}\n" +
+      "- Healing spell (isHealing: true shows a Self/Ally target toggle; rolled value heals instead of dealing damage): {\"name\":\"Mend\",\"type\":\"Ability\",\"isSpell\":true,\"isHealing\":true,\"description\":\"Knit wounds shut.\",\"damageDie\":8,\"damageStat\":\"INT\",\"slotCost\":2}\n" +
       "- Minimal bare single spell (ideal for a Content Lookup row): {\"name\":\"Spark\",\"type\":\"Ability\",\"isSpell\":true,\"description\":\"Quick magical strike.\",\"damageDie\":4,\"damageStat\":\"INT\",\"slotCost\":2,\"scaleDamageBySlots\":true}\n" +
       "- Minimal bare single feat (ideal for a Content Lookup row): {\"name\":\"Veteran Instinct\",\"type\":\"Feat\",\"description\":\"A passive edge that sharpens your battlefield awareness.\"}\n",
     template: {
@@ -2686,6 +2738,7 @@ export default function App() {
                     ...(action.formula !== undefined ? { formula: normalizeFormulaStatTokens(String(action.formula)) } : {}),
                     ...(action.damageBonus !== undefined ? { damageBonus: Number(action.damageBonus) || 0 } : {}),
                     ...(action.consumesTally !== undefined ? { consumesTally: Boolean(action.consumesTally) } : {}),
+                    ...(action.isHealing !== undefined ? { isHealing: Boolean(action.isHealing) } : {}),
                     ...(action.description !== undefined ? { description: String(action.description) } : {}),
                   } as AbilityAction;
                 }),
@@ -2714,6 +2767,7 @@ export default function App() {
         ...(s.slotCost !== undefined ? { slotCost: Math.max(1, Number(s.slotCost) || 1) } : {}),
         ...(s.slotCostMax !== undefined ? { slotCostMax: Math.max(1, Number(s.slotCostMax) || 1) } : {}),
         ...(s.scaleDamageBySlots !== undefined ? { scaleDamageBySlots: Boolean(s.scaleDamageBySlots) } : {}),
+        ...(s.isHealing !== undefined ? { isHealing: Boolean(s.isHealing) } : {}),
       }));
 
       if (importedAbilities.length === 0 && importedSpells.length === 0) {
@@ -2758,6 +2812,51 @@ export default function App() {
     }
 
     setWizardSpellSlots((current) => Math.max(0, current - selectedSlotCount));
+
+    // ─── Healing spells ────────────────────────────────────────────────────
+    if (spell.isHealing) {
+      const casterName = characterName.trim() || "You";
+      const target = spellTargetSelections[spell.id] ?? "self";
+
+      // Compute the rolled heal total from formula or damageDie (+stat).
+      let healTotal = 0;
+      let computed = false;
+      if (spell.formula && spell.formula.trim()) {
+        const outcome = evaluateWeaponFormula(spell.formula, effectiveStats);
+        if (outcome.ok) {
+          healTotal = outcome.total;
+          computed = true;
+        }
+      }
+      if (!computed && spell.damageDie !== undefined) {
+        const healRolls = spell.scaleDamageBySlots ? (selectedSlotCount || spell.slotCost || 1) : 1;
+        let roll = 0;
+        for (let i = 0; i < healRolls; i += 1) roll += rollD(spell.damageDie);
+        healTotal = roll + (spell.damageStat ? effectiveStats[spell.damageStat] : 0);
+        computed = true;
+      }
+
+      if (target === "ally") {
+        // Ally: consume slot/action, but do NOT modify caster HP. Recipient adjusts manually.
+        if (computed) {
+          addLog(`✨ ${casterName} casts ${spell.name} on Ally: ${healTotal} Healing Available`, "heal");
+        } else {
+          addLog(`✨ ${casterName} casts ${spell.name} on Ally`, "heal");
+        }
+        return;
+      }
+
+      // Self: add to current HP, capped at max HP.
+      if (computed && healTotal > 0) {
+        const cur = typeof currentHp === "number" ? currentHp : 0;
+        const max = typeof maxHp === "number" ? maxHp : 0;
+        setCurrentHp(Math.max(0, Math.min(max || Infinity, cur + healTotal)));
+        addLog(`✨ ${casterName} casts ${spell.name} on Self: Restored ${healTotal} HP`, "heal");
+      } else {
+        addLog(`✨ ${casterName} casts ${spell.name} on Self`, "heal");
+      }
+      return;
+    }
 
     if (spell.formula && spell.formula.trim()) {
       const outcome = evaluateWeaponFormula(spell.formula, effectiveStats);
@@ -2813,7 +2912,7 @@ export default function App() {
   const OmnivampBadge = () => (
     <span
       className="inline-flex items-center gap-1 align-middle px-1.5 py-0.5 rounded cursor-pointer"
-      title={`Omnivamp ${omnivamp}% — heals you for ${omnivamp}% of ALL damage dealt (rounded up)`}
+      title={`Omnivamp ${omnivamp}% — heals you for ${omnivamp}% of ALL damage dealt (standard rounding)`}
       onClick={(e) => { e.stopPropagation(); setStatPopup((prev) => (prev === "Omnivamp" ? null : "Omnivamp")); }}
       style={{ background: "rgba(224,80,80,0.08)", border: "1px solid rgba(224,80,80,0.35)" }}>
       <svg width="11" height="11" viewBox="0 0 12 12" fill="none">
@@ -3762,7 +3861,9 @@ export default function App() {
                             const sv = atk.stat ? resolveStatValue(atk.stat) : 0;
                             const attackPreview = atk.formula
                               ? atk.formula
-                              : `d${atk.die ?? "?"} + ${atk.stat ?? "?"}${atk.damageBonus ? ` +${atk.damageBonus}` : ""}`;
+                              : atk.die !== undefined && atk.stat !== undefined
+                                ? `d${atk.die} + ${atk.stat}(${sv})${atk.damageBonus ? ` +${atk.damageBonus}` : ""}`
+                                : "";
                             const passiveAttack = hasPassiveDescription(atk.description);
                             const noCharges = !passiveAttack && atk.consumesCharge && maxCharges && charges <= 0;
                             return (
@@ -3783,12 +3884,12 @@ export default function App() {
                                   </span>
                                   <ActionCostBadge cost={getActionCost(atk.description)} />
                                 </div>
-                                <div className="text-[10px] mt-0.5" style={{ color: "#9a8a6a", fontFamily: "'JetBrains Mono', monospace" }}>
-                                  {atk.formula
-                                    ? attackPreview
-                                    : `d${atk.die ?? "?"} + ${atk.stat ?? "?"}(${sv})${atk.damageBonus ? ` +${atk.damageBonus}` : ""}`}
-                                  {normalizedWeapon.omnivamp ? ` • omnivamp ${normalizedWeapon.omnivamp}%` : null}
-                                </div>
+                                {(attackPreview || normalizedWeapon.omnivamp) ? (
+                                  <div className="text-[10px] mt-0.5" style={{ color: "#9a8a6a", fontFamily: "'JetBrains Mono', monospace" }}>
+                                    {attackPreview}
+                                    {normalizedWeapon.omnivamp ? `${attackPreview ? " • " : ""}omnivamp ${normalizedWeapon.omnivamp}%` : null}
+                                  </div>
+                                ) : null}
                                 {atk.description ? (
                                   <div className="text-xs leading-snug mt-1" style={{ color: "#8a7a5a", fontFamily: "'Crimson Pro', serif" }}>
                                     {atk.description}
@@ -4163,6 +4264,22 @@ export default function App() {
                               </span>
                             )}
                           </div>
+                          {spell.isHealing && (
+                            <div className="flex items-center rounded overflow-hidden" style={{ border: "1px solid rgba(122,204,122,0.4)" }}>
+                              {(["self", "ally"] as const).map((t) => {
+                                const active = (spellTargetSelections[spell.id] ?? "self") === t;
+                                return (
+                                  <button key={t} onClick={() => setSpellTargetSelections((prev) => ({ ...prev, [spell.id]: t }))}
+                                    className="px-1.5 py-0.5 text-[8px] uppercase transition-all"
+                                    style={{
+                                      background: active ? "rgba(122,204,122,0.2)" : "#0e0c08",
+                                      color: active ? "#7acc7a" : "#6a5a3a",
+                                      fontFamily: "'Cinzel', serif", cursor: "pointer", border: "none",
+                                    }}>{t}</button>
+                                );
+                              })}
+                            </div>
+                          )}
                           <button
                             onClick={() => castSpell(spell, selectedSpellSlot)}
                             className="text-[10px] px-2 py-0.5 rounded transition-all hover:opacity-90 active:scale-95 font-semibold"
@@ -4625,7 +4742,9 @@ export default function App() {
                             const disabled = !!action.consumesTally && abilityRemaining <= 0;
                             const preview = action.formula
                               ? action.formula
-                              : `d${action.die ?? "?"} + ${action.stat ?? "?"}${action.damageBonus ? ` + ${action.damageBonus}` : ""}`;
+                              : action.die !== undefined && action.stat !== undefined
+                                ? `d${action.die} + ${action.stat}${action.damageBonus ? ` + ${action.damageBonus}` : ""}`
+                                : "";
 
                             return (
                               <button
@@ -4651,9 +4770,11 @@ export default function App() {
                                     </span>
                                   ) : null}
                                 </div>
-                                <div className="text-[10px]" style={{ color: "#9a8a6a", fontFamily: "'JetBrains Mono', monospace" }}>
-                                  {preview}
-                                </div>
+                                {preview ? (
+                                  <div className="text-[10px]" style={{ color: "#9a8a6a", fontFamily: "'JetBrains Mono', monospace" }}>
+                                    {preview}
+                                  </div>
+                                ) : null}
                                 {action.description ? (
                                   <div className="text-xs leading-snug mt-1" style={{ color: "#8a7a5a", fontFamily: "'Crimson Pro', serif" }}>
                                     {action.description}
@@ -4733,7 +4854,7 @@ export default function App() {
                           normalizedWeapon.attacks.map((atk, j) => (
                             <div key={j} className="px-2 py-0.5 rounded" style={{ background: "rgba(196,133,58,0.06)", border: "1px solid rgba(196,133,58,0.15)", color: "#6a5a3a", fontFamily: "'JetBrains Mono', monospace" }}>
                               <span className="text-[10px]" style={{ color: "#6a5a3a", fontFamily: "'JetBrains Mono', monospace" }}>
-                                {atk.name}: {atk.formula ? atk.formula : `d${atk.die ?? "?"}+${atk.stat ?? "?"}`}{atk.consumesCharge ? " ⚡" : ""}
+                                {atk.name}{atk.formula ? `: ${atk.formula}` : atk.die !== undefined && atk.stat !== undefined ? `: d${atk.die}+${atk.stat}` : ""}{atk.consumesCharge ? " ⚡" : ""}
                               </span>
                               {atk.description ? (
                                 <div className="text-xs leading-snug mt-0.5" style={{ color: "#8a7a5a", fontFamily: "'Crimson Pro', serif" }}>
@@ -5318,14 +5439,39 @@ export default function App() {
                       </div>
                       <div className="flex items-center justify-between">
                         <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11, color: "#e2cfa0" }}>{cm.currentHp}/{cm.def.hp}</span>
+                      </div>
+                      {/* Damage intake tracker */}
+                      <div className="flex flex-col gap-1">
                         <div className="flex gap-1">
-                          {[-5,-1,1,5].map((d) => (
-                            <button key={d} onClick={() => setCombatMonsters((prev) => prev.map((m) => m.uid === cm.uid ? { ...m, currentHp: Math.max(0, Math.min(m.def.hp, m.currentHp + d)) } : m))}
-                              className="text-xs hover:opacity-80" style={{ background: d < 0 ? "rgba(139,28,28,0.3)" : "rgba(90,170,90,0.2)", border: `1px solid ${d < 0 ? "rgba(139,28,28,0.4)" : "rgba(90,170,90,0.35)"}`, color: d < 0 ? "#f5c5c5" : "#7acc7a", borderRadius: 3, padding: "1px 4px", fontFamily: "'Cinzel', serif", cursor: "pointer", fontSize: 11 }}>
-                              {d > 0 ? `+${d}` : d}
-                            </button>
-                          ))}
+                          {(["physical", "magic", "true"] as const).map((t) => {
+                            const active = (monsterDamageTypes[cm.uid] ?? "physical") === t;
+                            return (
+                              <button key={t} onClick={() => setMonsterDamageTypes((prev) => ({ ...prev, [cm.uid]: t }))}
+                                className="flex-1 py-0.5 text-[9px] capitalize transition-all"
+                                style={{
+                                  background: active ? (t === "physical" ? "rgba(196,133,58,0.2)" : t === "magic" ? "rgba(106,90,200,0.2)" : "rgba(122,176,204,0.2)") : "#111008",
+                                  border: `1px solid ${active ? (t === "physical" ? "#c4853a" : t === "magic" ? "#6a5ae0" : "#7ab0cc") : "rgba(196,133,58,0.15)"}`,
+                                  borderRadius: 3, color: active ? (t === "physical" ? "#c4853a" : t === "magic" ? "#9a8acc" : "#7ab0cc") : "#9a8a6a",
+                                  fontFamily: "'Cinzel', serif", cursor: "pointer",
+                                }}>{t}</button>
+                            );
+                          })}
                         </div>
+                        <input
+                          type="number" min={0}
+                          value={monsterDamageInputs[cm.uid] ?? ""}
+                          placeholder="Damage"
+                          onChange={(e) => setMonsterDamageInputs((prev) => ({ ...prev, [cm.uid]: e.target.value }))}
+                          onKeyDown={(e) => {
+                            if (e.key !== "Enter") return;
+                            const raw = monsterDamageInputs[cm.uid];
+                            if (!raw) return;
+                            applyMonsterIncomingDamage(cm, Math.abs(Number(raw)), monsterDamageTypes[cm.uid] ?? "physical");
+                            setMonsterDamageInputs((prev) => ({ ...prev, [cm.uid]: "" }));
+                          }}
+                          className="w-full px-2 py-1 text-[11px] outline-none"
+                          style={{ background: "rgba(139,28,28,0.15)", border: "1px solid rgba(139,28,28,0.4)", borderRadius: 3, color: "#f5c5c5", fontFamily: "'JetBrains Mono', monospace" }}
+                        />
                       </div>
                       {/* Compact stats */}
                       <div className="flex gap-1 flex-wrap">
@@ -5751,16 +5897,16 @@ export default function App() {
       {wizardSignatureSpellPromptOpen && (
         <div className="fixed inset-0 flex items-center justify-center z-60" style={{ background: "rgba(0,0,0,0.78)" }} onClick={() => { setWizardSignatureSpellPromptOpen(false); setWizardSignatureSpellAcknowledged(true); }}>
           <div className="p-6 flex flex-col gap-4 w-full max-w-md" style={{ background: "#0e0c08", border: "1px solid rgba(106,154,224,0.4)", borderRadius: 8 }} onClick={(e) => e.stopPropagation()}>
-            <div className="text-base font-bold" style={{ fontFamily: "'Cinzel', serif", color: "#6a9ae0" }}>Signature Spell Menu</div>
+            <div className="text-base font-bold" style={{ fontFamily: "'Cinzel', serif", color: "#6a9ae0" }}>Signature Spell</div>
             <div className="text-sm" style={{ color: "#9a8a6a", fontFamily: "'Crimson Pro', serif" }}>
-              This opens the signature spell setup flow. No spell is created yet; it simply opens the menu for your next choice.
+              At level 5, you unlock your <span className="font-semibold" style={{ color: "#6a9ae0" }}>Signature Spell</span>. This is a custom spell designed entirely by you. Reach out to the DM to brainstorm ideas, establish its mechanics, or ask any questions.
             </div>
             <div className="flex justify-end gap-2">
               <button onClick={() => { setWizardSignatureSpellPromptOpen(false); setWizardSignatureSpellAcknowledged(true); }} className="px-4 py-2 text-sm" style={{ background: "#111008", border: "1px solid rgba(106,154,224,0.2)", borderRadius: 4, color: "#9a8a6a", fontFamily: "'Cinzel', serif", cursor: "pointer" }}>
                 Later
               </button>
               <button onClick={startWizardSignatureSpell} className="px-4 py-2 text-sm font-semibold" style={{ background: "linear-gradient(135deg, #101a2b, #1b2e45)", border: "1px solid rgba(106,154,224,0.4)", borderRadius: 4, color: "#6a9ae0", fontFamily: "'Cinzel', serif", cursor: "pointer" }}>
-                Open Menu
+                Got It
               </button>
             </div>
           </div>

@@ -30,16 +30,22 @@ export interface AttackResolution {
   effectLines: string[];
 }
 
+// Stepped, diminishing-returns mitigation: 1:1 up to 3 defense, then 2 defense per +1 mitigation.
+const computeMitigation = (defense: number): number => {
+  const def = Math.max(0, Math.floor(defense));
+  return def <= 3 ? def : 3 + Math.floor((def - 3) / 2);
+};
+
 const applyDamageTypeResistance = (
   rawDamage: number,
   damageType: MonsterDefinition["attacks"][number]["damageType"] | ActiveAbility["damageType"] | MonsterEffect["damageType"],
   monster: MonsterDefinition,
 ): number => {
   if (damageType === "magic") {
-    return Math.max(0, rawDamage - monster.mr);
+    return Math.max(0, rawDamage - computeMitigation(monster.mr));
   }
   if (damageType === "physical") {
-    return Math.max(0, rawDamage - monster.ac);
+    return Math.max(0, rawDamage - computeMitigation(monster.ac));
   }
   return rawDamage;
 };
@@ -168,30 +174,29 @@ export const resolveMonsterAttack = (
   const passive = resolvePassiveTrigger(monster, runtime, "on_attack_hit");
   const rawDamage = Math.max(0, roll.total + passive.bonusDamage);
   const totalDamage = applyDamageTypeResistance(rawDamage, attack.damageType, monster);
-  const parts = [`${monster.name} - ${attack.name}`, `(${roll.diceResults.join("+") || "0"}`];
-  if (roll.statBonus) parts.push(`+${roll.statBonus}`);
-  if (roll.flatBonus) parts.push(`+${roll.flatBonus}`);
-  parts.push(`) = ${totalDamage} damage`);
+  const logLine = `${monster.name}: ${totalDamage} Damage`;
 
-  const effectLines = [...passive.logLines];
-  if (attack.description) effectLines.push(attack.description);
+  const effectLines: string[] = [];
   attack.effects?.forEach((effect) => {
     const outcome = applyEffect(effect, monster.stats, passive.runtime);
-    if (outcome.logLine) effectLines.push(outcome.logLine);
+    // Effects still resolve mechanically; only non-damage notes (heals, resource gains) surface.
+    if (outcome.logLine && effect.type !== "damage") effectLines.push(outcome.logLine);
   });
 
   let selfHealing = passive.healing;
   if (attack.omnivamp && attack.omnivamp > 0 && totalDamage > 0) {
-    const omniHeal = Math.ceil((totalDamage * attack.omnivamp) / 100);
+    const omniHeal = Math.round((totalDamage * attack.omnivamp) / 100);
     selfHealing += omniHeal;
-    effectLines.push(`${monster.name} omnivamp ${attack.omnivamp}% — restores ${omniHeal} HP.`);
+  }
+  if (selfHealing > 0) {
+    effectLines.push(`${monster.name} restores ${selfHealing} HP.`);
   }
 
   return {
     runtime: passive.runtime,
     damage: totalDamage,
     selfHealing,
-    logLine: parts.join(" "),
+    logLine,
     effectLines,
   };
 };
@@ -258,17 +263,23 @@ export const resolveActiveAbility = (
     nextRuntime = outcome.runtime;
     damage += outcome.damage;
     selfHealing += outcome.selfHealing;
-    if (outcome.logLine) effectLines.push(outcome.logLine);
+    if (outcome.logLine && effect.type !== "damage") effectLines.push(outcome.logLine);
   });
 
   const resistedDamage = applyDamageTypeResistance(damage, baseDamageType, monster);
+
+  const logLine = ability.target === "player"
+    ? `${monster.name}: ${resistedDamage} Damage`
+    : ability.target === "self"
+      ? `${monster.name} restores ${selfHealing} HP.`
+      : `${monster.name} uses ${ability.name}.`;
 
   return {
     runtime: nextRuntime,
     canUse: true,
     damage: resistedDamage,
     selfHealing,
-    logLine: `${monster.name} uses ${ability.name}${ability.target === "player" ? ` for ${resistedDamage} damage` : ability.target === "self" ? ` and heals ${selfHealing}` : ""}.`,
+    logLine,
     effectLines,
   };
 };
