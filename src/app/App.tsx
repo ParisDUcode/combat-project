@@ -8,7 +8,6 @@ import {
   resolvePassiveTrigger,
   tickMonsterCooldowns,
 } from "./monsters/engine";
-import { BASE_MONSTER_REGISTRY } from "./monsters/registry";
 import type {
   ActiveAbility,
   MonsterCombatRuntime,
@@ -18,6 +17,7 @@ import type {
 import { normalizeMonsterCollection } from "./monsters/types";
 import { collectAbilityDerivedModifierTotals, resolveAbilityModifierTarget } from "./abilityModifierTargets";
 import { fetchItemLookupMap } from "./services/itemLookupService";
+import { fetchMonsterLookup } from "./services/monsterLookupService";
 
 type StatKey = "PHYS" | "CON" | "INT" | "SOC";
 type ClassName = "Fighter" | "Wizard";
@@ -717,6 +717,11 @@ export default function App() {
   const [itemLookupError, setItemLookupError] = useState("");
   const [itemLookupLoading, setItemLookupLoading] = useState(false);
   const [itemLookupMap, setItemLookupMap] = useState<Map<string, string> | null>(null);
+  // Monster roster is loaded from the published Google Sheet (mirrors the item database importer).
+  const [monsterRegistry, setMonsterRegistry] = useState<MonsterDefinition[]>([]);
+  const [monsterSheetLoaded, setMonsterSheetLoaded] = useState(false);
+  const [monsterSheetLoading, setMonsterSheetLoading] = useState(false);
+  const [monsterSheetError, setMonsterSheetError] = useState("");
   const [itemForm, setItemForm] = useState<{
     name: string; type: ItemType; slot: EquipSlot | ""; die: number; stat: StatKey; damageBonus: number; acBonus: number; description: string;
   }>({ name: "", type: "weapon", slot: "", die: 8, stat: "PHYS", damageBonus: 0, acBonus: 0, description: "" });
@@ -1829,6 +1834,31 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [itemLookupOpen]);
 
+  // ─── Monster sheet sync (Google Sheet CSV → in-memory registry) ──────────
+  const refreshMonsterRegistry = async () => {
+    setMonsterSheetLoading(true);
+    setMonsterSheetError("");
+    try {
+      const result = await fetchMonsterLookup();
+      setMonsterRegistry(result.list);
+      setMonsterSheetLoaded(true);
+      if (result.errors.length > 0) {
+        setMonsterSheetError(`Skipped ${result.errors.length} invalid row(s): ${result.errors[0]}`);
+      }
+    } catch (err) {
+      setMonsterSheetError(err instanceof Error ? err.message : "Failed to load monster sheet.");
+    } finally {
+      setMonsterSheetLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (fightMenuOpen && !monsterSheetLoaded && !monsterSheetLoading) {
+      void refreshMonsterRegistry();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fightMenuOpen]);
+
   const isWeaponSlot = (slot: EquipSlot) =>
     slot === "weapon1"
     || slot === "weapon2"
@@ -2107,7 +2137,7 @@ export default function App() {
     }
 
     if (from === "roster") {
-      const def = BASE_MONSTER_REGISTRY.find((m) => m.id === id);
+      const def = monsterRegistry.find((m) => m.id === id);
       if (!def) return;
 
       const nextEntry = createFightMonsterEntry(def);
@@ -2197,7 +2227,7 @@ export default function App() {
   const groupedMonsterRoster = MONSTER_TIER_ORDER.map((tier) => ({
     tier,
     ...rosterTierMeta[tier],
-    monsters: BASE_MONSTER_REGISTRY.filter((monster) => getMonsterTier(monster) === tier),
+    monsters: monsterRegistry.filter((monster) => getMonsterTier(monster) === tier),
   }));
   const fightAlliesWithNames = withDuplicateFightNames(fightAllies);
   const fightCombatantsWithNames = withDuplicateFightNames(fightCombatants);
@@ -2473,7 +2503,7 @@ export default function App() {
       "═══════════════════════════════════════════════════════════════",
       "CATEGORY 4 — MONSTERS / ENCOUNTER DEFINITIONS",
       "═══════════════════════════════════════════════════════════════",
-      "Monsters are TS definition files under src/app/monsters/definitions/ implementing MonsterDefinition. Keep stable string ids so encounter saves stay predictable.",
+      "Monsters are loaded at runtime from the published Monster Google Sheet (Key / Payload CSV) via the monster lookup service. Column A is the normalized lowercase key, Column B a single-line MonsterDefinition JSON. Keep stable string ids so encounter saves stay predictable.",
       "REQUIRED: id, name, cr (string), stats {PHYS,CON,INT,SOC}, hp, ac, mr, speed, attacks[], activeAbilities[], passiveAbilities[].",
       "OPTIONAL: resourcePools: [{ id, name, current, max }], tags: string[].",
       "RollFormula (used by attacks, abilities, effects): { diceCount, diceSides, stat? (PHYS|CON|INT|SOC), flatBonus?, minTotal? }. minTotal floors the final total.",
@@ -2488,7 +2518,7 @@ export default function App() {
       "═══════════════════════════════════════════════════════════════",
       "- Items: single object or array → Paste Item JSON / Content Lookup row Payload.",
       "- Shared content (abilities+spells): { abilities:[...], spells:[...] } → Paste Shared Content JSON. A Content Lookup row may be a single bare ability or bare spell object.",
-      "- Monsters: edited as code definitions, not pasted at runtime.",
+      "- Monsters: synced from the Monster Google Sheet via the Fight Menu — Sync Monster Sheet button (cached in memory for the session).",
     ].join("\n"),
     examples: {
       items: [
@@ -4986,7 +5016,25 @@ export default function App() {
                   + Add player
                 </button>
 
-                <div className="text-xs uppercase tracking-widest mb-3" style={{ color: "#9a8a6a", fontFamily: "'Cinzel', serif" }}>Monsters</div>
+                <div className="flex items-center justify-between mb-3">
+                  <div className="text-xs uppercase tracking-widest" style={{ color: "#9a8a6a", fontFamily: "'Cinzel', serif" }}>Monsters</div>
+                  <button
+                    onClick={() => void refreshMonsterRegistry()}
+                    disabled={monsterSheetLoading}
+                    className="text-[10px] px-2 py-0.5 hover:opacity-80"
+                    style={{ background: "#111008", border: "1px solid rgba(196,133,58,0.2)", borderRadius: 4, color: "#9a8a6a", fontFamily: "'Cinzel', serif", cursor: monsterSheetLoading ? "default" : "pointer" }}
+                  >
+                    {monsterSheetLoading ? "Syncing…" : "Sync Monster Sheet"}
+                  </button>
+                </div>
+                {monsterSheetError && (
+                  <div className="text-[10px] mb-2" style={{ color: "#e07a7a", fontFamily: "'Crimson Pro', serif" }}>{monsterSheetError}</div>
+                )}
+                {!monsterSheetLoaded && !monsterSheetLoading && !monsterSheetError && (
+                  <div className="text-[10px] italic mb-2" style={{ color: "#3a3020", fontFamily: "'Crimson Pro', serif" }}>
+                    Monster sheet not synced yet.
+                  </div>
+                )}
                 <div className="flex flex-col gap-3">
                   {groupedMonsterRoster.map((group) => (
                     <div key={group.tier}>
