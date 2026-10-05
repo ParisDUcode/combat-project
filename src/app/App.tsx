@@ -691,6 +691,9 @@ export default function App() {
   const [longRestRoll, setLongRestRoll] = useState(0);
   const [longRestSafe, setLongRestSafe] = useState(false);
 
+  // ─── Custom dice ──────────────────────────────────────────────────────────
+  const [customDiceCount, setCustomDiceCount] = useState(1);
+
   // ─── Fight menu ───────────────────────────────────────────────────────────
   const [fightMenuOpen, setFightMenuOpen] = useState(false);
   const [fightAllies, setFightAllies] = useState<FightMonsterEntry[]>([]);
@@ -1484,8 +1487,20 @@ export default function App() {
   };
 
   const rollCustomDie = (sides: number) => {
-    const roll = rollD(sides);
-    addLog(`Custom roll — d${sides} (${roll})`, "info");
+    const count = Math.max(1, Math.floor(customDiceCount) || 1);
+    const rolls: number[] = [];
+    let total = 0;
+    for (let i = 0; i < count; i++) {
+      const roll = rollD(sides);
+      rolls.push(roll);
+      total += roll;
+    }
+    addLog(
+      count > 1
+        ? `Custom roll — ${count}d${sides} (${rolls.join(" + ")}) = ${total}`
+        : `Custom roll — d${sides} (${total})`,
+      "info"
+    );
   };
 
   const applyWeaponHealing = (item: InventoryItem) => {
@@ -3449,6 +3464,33 @@ export default function App() {
                       {`d${sides}`}
                     </button>
                   ))}
+                </div>
+                <div className="mt-1.5 flex items-center justify-end gap-1.5">
+                  <span className="text-[10px] uppercase tracking-widest" style={{ color: "#9a8a6a", fontFamily: "'Cinzel', serif" }}>
+                    dice
+                  </span>
+                  <span className="text-[10px]" style={{ color: "#9a8a6a", fontFamily: "'Cinzel', serif" }}>
+                    x
+                  </span>
+                  <input
+                    type="number"
+                    min={1}
+                    step={1}
+                    value={customDiceCount}
+                    onChange={(e) => setCustomDiceCount(Math.max(1, Math.floor(Number(e.target.value) || 1)))}
+                    style={{
+                      width: 44,
+                      background: "rgba(196,133,58,0.12)",
+                      border: "1px solid rgba(196,133,58,0.35)",
+                      borderRadius: 4,
+                      color: "#e2cfa0",
+                      fontFamily: "'JetBrains Mono', monospace",
+                      fontSize: 11,
+                      textAlign: "center",
+                      outline: "none",
+                      padding: "2px 0",
+                    }}
+                  />
                 </div>
               </div>
             </div>
