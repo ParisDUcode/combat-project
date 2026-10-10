@@ -341,15 +341,18 @@ const ExpandCaret = ({ expanded, onToggle }: { expanded: boolean; onToggle: () =
     onTouchStart={(e) => e.stopPropagation()}
     className="flex items-center justify-center transition-all hover:opacity-90"
     style={{
-      background: "none",
-      border: "none",
+      background: expanded ? "rgba(226,207,160,0.12)" : "rgba(255,255,255,0.04)",
+      border: `1px solid ${expanded ? "rgba(226,207,160,0.45)" : "rgba(226,207,160,0.18)"}`,
+      borderRadius: 5,
       cursor: "pointer",
-      color: expanded ? "#e2cfa0" : "#6a5a3a",
-      padding: "2px 4px",
+      color: expanded ? "#e2cfa0" : "#8a7a5a",
+      padding: "8px 14px",
       lineHeight: 1,
-      fontSize: 12,
+      fontSize: 22,
       flexShrink: 0,
-      marginLeft: 2,
+      marginLeft: 6,
+      minWidth: 40,
+      minHeight: 36,
     }}
   >
     {expanded ? "▾" : "▸"}
@@ -3685,7 +3688,7 @@ export default function App() {
                           className="px-2 py-0.5 text-[10px] uppercase tracking-widest"
                           style={{ background: "rgba(196,133,58,0.08)", border: "1px solid rgba(196,133,58,0.3)", borderRadius: 3, color: "#c4853a", fontFamily: "'Cinzel', serif", cursor: "pointer" }}
                         >
-                          Hide
+                          Hide ability
                         </button>
                       </div>
                     ) : null}
@@ -3737,7 +3740,7 @@ export default function App() {
                               className="px-2 py-0.5 text-[10px] uppercase tracking-widest"
                               style={{ background: "rgba(196,133,58,0.08)", border: "1px solid rgba(196,133,58,0.3)", borderRadius: 3, color: "#c4853a", fontFamily: "'Cinzel', serif", cursor: "pointer" }}
                             >
-                              Hide
+                              Hide ability
                             </button>
                           </div>
                         ) : null}
@@ -3836,7 +3839,7 @@ export default function App() {
                               className="px-2 py-0.5 text-[10px] uppercase tracking-widest"
                               style={{ background: "rgba(196,133,58,0.08)", border: "1px solid rgba(196,133,58,0.3)", borderRadius: 3, color: "#c4853a", fontFamily: "'Cinzel', serif", cursor: "pointer" }}
                             >
-                              Hide
+                              Hide ability
                             </button>
                           </div>
                         ) : null}
@@ -3865,7 +3868,7 @@ export default function App() {
                               className="px-2 py-0.5 text-[10px] uppercase tracking-widest"
                               style={{ background: "rgba(196,133,58,0.08)", border: "1px solid rgba(196,133,58,0.3)", borderRadius: 3, color: "#c4853a", fontFamily: "'Cinzel', serif", cursor: "pointer" }}
                             >
-                              Hide
+                              Hide ability
                             </button>
                           </div>
                         ) : null}
@@ -4065,7 +4068,7 @@ export default function App() {
                             className="px-2 py-0.5 text-[10px] uppercase tracking-widest"
                             style={{ background: "rgba(196,133,58,0.08)", border: "1px solid rgba(196,133,58,0.3)", borderRadius: 3, color: "#c4853a", fontFamily: "'Cinzel', serif", cursor: "pointer" }}
                           >
-                            Hide
+                            Hide ability
                           </button>
                         </div>
                       ) : null}
@@ -4405,7 +4408,7 @@ export default function App() {
                               className="px-2 py-0.5 text-[10px] uppercase tracking-widest"
                               style={{ background: "rgba(106,154,224,0.08)", border: "1px solid rgba(106,154,224,0.3)", borderRadius: 3, color: "#6a9ae0", fontFamily: "'Cinzel', serif", cursor: "pointer" }}
                             >
-                              Hide
+                              Hide ability
                             </button>
                           </div>
                         ) : null}
