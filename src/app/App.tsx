@@ -328,39 +328,49 @@ const ActionCostBadge = ({ cost }: { cost: ActionCost }) => (
   </span>
 );
 
-// Isolated expand caret pinned to a card's top-right corner. Lightweight glyph; clicking it
+// Isolated expand caret pinned to a card's top-right corner. Boxed 32x32 target; clicking it
 // opens a detail modal. Stops propagation so card roll/cast handlers never fire.
-const ExpandCaret = ({ onOpen }: { onOpen: () => void }) => (
-  <button
-    type="button"
-    aria-label="View details"
-    title="View details"
-    onClick={(e) => {
-      e.stopPropagation();
-      onOpen();
-    }}
-    onMouseDown={(e) => e.stopPropagation()}
-    onTouchStart={(e) => e.stopPropagation()}
-    className="flex items-center justify-center transition-all hover:opacity-100"
-    style={{
-      position: "absolute",
-      top: 8,
-      right: 8,
-      zIndex: 10,
-      background: "transparent",
-      border: "none",
-      borderRadius: 4,
-      cursor: "pointer",
-      color: "#8a7a5a",
-      padding: "4px 6px",
-      lineHeight: 1,
-      fontSize: 16,
-      flexShrink: 0,
-    }}
-  >
-    ▾
-  </button>
-);
+const ExpandCaret = ({ onOpen }: { onOpen: () => void }) => {
+  const [hover, setHover] = useState(false);
+  return (
+    <button
+      type="button"
+      aria-label="View details"
+      title="View details"
+      onClick={(e) => {
+        e.stopPropagation();
+        onOpen();
+      }}
+      onMouseDown={(e) => e.stopPropagation()}
+      onTouchStart={(e) => e.stopPropagation()}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{
+        position: "absolute",
+        top: 8,
+        right: 8,
+        zIndex: 10,
+        width: 32,
+        height: 32,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        background: hover ? "rgba(212,175,55,0.1)" : "rgba(0,0,0,0.4)",
+        border: `1px solid ${hover ? "rgba(212,175,55,0.7)" : "rgba(212,175,55,0.3)"}`,
+        borderRadius: 4,
+        cursor: "pointer",
+        color: hover ? "#e2cfa0" : "#8a7a5a",
+        padding: 0,
+        lineHeight: 1,
+        fontSize: 13,
+        flexShrink: 0,
+        transition: "border-color 120ms ease, background 120ms ease",
+      }}
+    >
+      ▾
+    </button>
+  );
+};
 
 interface CardDetailData {
   title: string;
