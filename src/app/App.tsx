@@ -264,18 +264,44 @@ const usesWeaponLogic = (item: InventoryItem | null | undefined) => Boolean(item
 // Lets descriptions classify an entry without dedicated data fields.
 type ActionCost = "action" | "bonus" | "passive";
 
-const getActionCost = (description?: string): ActionCost => {
-  const normalized = description?.toLowerCase() ?? "";
+// Universal Action/Bonus Action resolver. Accepts a raw description string OR an entry
+// object; scans description, actionType, type, and any attack sub-descriptions (lowercase).
+// "passive" is preserved as a special classification; "reaction"/"bonus action" -> bonus;
+// everything else defaults to action.
+const getActionType = (entry?: string | Record<string, any> | null): ActionCost => {
+  const collectStrings = (value: any, acc: string[]): void => {
+    if (value === null || value === undefined) return;
+    if (typeof value === "string") {
+      acc.push(value);
+    } else if (Array.isArray(value)) {
+      value.forEach((item) => collectStrings(item, acc));
+    } else if (typeof value === "object") {
+      // Only inspect the classification-relevant fields, not arbitrary nested data.
+      collectStrings(value.description, acc);
+      collectStrings(value.actionType, acc);
+      collectStrings(value.type, acc);
+      collectStrings(value.name, acc);
+      if (Array.isArray(value.attacks)) collectStrings(value.attacks, acc);
+    }
+  };
+
+  const parts: string[] = [];
+  collectStrings(entry, parts);
+  const normalized = parts.join(" ").toLowerCase();
+
   if (/\bpassive\b/.test(normalized)) return "passive";
-  return normalized.includes("bonus action") ? "bonus" : "action";
+  if (normalized.includes("reaction") || normalized.includes("bonus action")) return "bonus";
+  return "action";
 };
 
+const getActionCost = (description?: string): ActionCost => getActionType(description);
+
 const getExecutableActionCost = (description?: string): "action" | "bonus" => {
-  const cost = getActionCost(description);
+  const cost = getActionType(description);
   return cost === "passive" ? "action" : cost;
 };
 
-const hasPassiveDescription = (description?: string): boolean => getActionCost(description) === "passive";
+const hasPassiveDescription = (description?: string): boolean => getActionType(description) === "passive";
 
 const getItemBonusSummary = (item: InventoryItem): string[] => [
   ...Object.entries(item.statBonus ?? {})
@@ -300,6 +326,34 @@ const ActionCostBadge = ({ cost }: { cost: ActionCost }) => (
     <span>{cost === "passive" ? "◆" : cost === "bonus" ? "▲" : "■"}</span>
     <span>{cost === "passive" ? "Passive" : cost === "bonus" ? "Bonus action" : "Action"}</span>
   </span>
+);
+
+// Isolated expand/collapse caret. Stops propagation so card roll/cast handlers don't fire.
+const ExpandCaret = ({ expanded, onToggle }: { expanded: boolean; onToggle: () => void }) => (
+  <button
+    type="button"
+    aria-label={expanded ? "Collapse description" : "Expand description"}
+    onClick={(e) => {
+      e.stopPropagation();
+      onToggle();
+    }}
+    onMouseDown={(e) => e.stopPropagation()}
+    onTouchStart={(e) => e.stopPropagation()}
+    className="flex items-center justify-center transition-all hover:opacity-90"
+    style={{
+      background: "none",
+      border: "none",
+      cursor: "pointer",
+      color: expanded ? "#e2cfa0" : "#6a5a3a",
+      padding: "2px 4px",
+      lineHeight: 1,
+      fontSize: 12,
+      flexShrink: 0,
+      marginLeft: 2,
+    }}
+  >
+    {expanded ? "▾" : "▸"}
+  </button>
 );
 
 const STAT_DESCRIPTIONS: Record<StatKey, string> = {
@@ -656,9 +710,8 @@ export default function App() {
   const [statPopup, setStatPopup] = useState<StatKey | "AC" | "Initiative" | "Speed" | "Omnivamp" | null>(null);
   const [adminOpen, setAdminOpen] = useState(false);
   const [dodgePopup, setDodgePopup] = useState<string | null>(null);
-  const [hiddenEquipmentEntries, setHiddenEquipmentEntries] = useState<Record<string, boolean>>({});
-  const [hiddenWeaponAttackEntries, setHiddenWeaponAttackEntries] = useState<Record<string, boolean>>({});
-  const [hidePrompt, setHidePrompt] = useState<{ kind: "slot" | "weapon-attack" | "ability"; key: string; label: string } | null>(null);
+  // Unified hidden-card tracking, persisted via hiddenActionIds in save/load.
+  const [hiddenActionIds, setHiddenActionIds] = useState<string[]>([]);
   const longPressTimerRef = useRef<number | null>(null);
   const suppressNextClickRef = useRef(false);
   const [copyToast, setCopyToast] = useState<string | null>(null);
@@ -735,6 +788,9 @@ export default function App() {
   const [chargeInputDrafts, setChargeInputDrafts] = useState<Record<string, string>>({});
   const [chargeInputHints, setChargeInputHints] = useState<Record<string, string>>({});
   const chargeInputTimers = useRef<Record<string, number>>({});
+  const [expandedCards, setExpandedCards] = useState<Record<string, boolean>>({});
+  const toggleCardExpanded = (key: string) =>
+    setExpandedCards((prev) => ({ ...prev, [key]: !prev[key] }));
 
   const [log, setLog] = useState<LogEntry[]>([]);
   const [nextId, setNextId] = useState(1);
@@ -794,6 +850,7 @@ export default function App() {
       importSpellJsonOpen,
       spellSlotSelections,
       spellTargetSelections,
+      hiddenActionIds,
       characterLoadJsonText,
       characterLoadJsonOpen,
       selectedItem,
@@ -1001,6 +1058,7 @@ export default function App() {
     if (d.wizardSpellSlots !== undefined) setWizardSpellSlots(d.wizardSpellSlots);
     if (d.spellSlotSelections !== undefined) setSpellSlotSelections(d.spellSlotSelections);
     if (d.spellTargetSelections !== undefined) setSpellTargetSelections(d.spellTargetSelections);
+    if (d.hiddenActionIds !== undefined) setHiddenActionIds(Array.isArray(d.hiddenActionIds) ? d.hiddenActionIds.filter((k: any) => typeof k === "string") : []);
     if (d.spells !== undefined) {
       const loadedSpells = Array.isArray(d.spells) ? d.spells : [];
       setSpells(loadedSpells.map((spell: Spell) => normalizeLoadedSpell(spell)));
@@ -1958,17 +2016,11 @@ export default function App() {
     }
   };
 
-  const confirmHidePrompt = () => {
-    if (!hidePrompt) return;
-    if (hidePrompt.kind === "ability") {
-      setAbilities((prev) => prev.map((ability) => ability.id === Number(hidePrompt.key) ? { ...ability, hidden: true } : ability));
-    } else if (hidePrompt.kind === "slot") {
-      setHiddenEquipmentEntries((prev) => ({ ...prev, [hidePrompt.key]: true }));
-    } else if (hidePrompt.kind === "weapon-attack") {
-      setHiddenWeaponAttackEntries((prev) => ({ ...prev, [hidePrompt.key]: true }));
-    }
-    setHidePrompt(null);
-  };
+  // ─── Hidden cards (unified, persisted via hiddenActionIds) ───────────────
+  const isCardHidden = (key: string) => hiddenActionIds.includes(key);
+  const hideCard = (key: string) =>
+    setHiddenActionIds((prev) => (prev.includes(key) ? prev : [...prev, key]));
+  const unhideAllCards = () => setHiddenActionIds([]);
 
   const copyJsonToClipboard = async (data: unknown, label: string) => {
     const text = JSON.stringify(data, null, 2);
@@ -1988,7 +2040,7 @@ export default function App() {
   };
 
   const copyAbilityJson = (ability: Ability) => {
-    const { id, hidden, ...rest } = ability;
+    const { id, ...rest } = ability;
     copyJsonToClipboard(rest, ability.name || "Feat");
   };
 
@@ -2019,23 +2071,13 @@ export default function App() {
   };
 
   const clearHiddenDisplayForItem = (itemId: number) => {
-    setHiddenEquipmentEntries((prev) => {
-      const next = { ...prev };
-      Object.keys(next).forEach((key) => {
-        if (key.endsWith(`:${itemId}`)) delete next[key];
-      });
-      return next;
-    });
-    setHiddenWeaponAttackEntries((prev) => {
-      const next = { ...prev };
-      Object.keys(next).forEach((key) => {
-        if (key.startsWith(`${itemId}:`)) delete next[key];
-      });
-      return next;
-    });
+    setHiddenActionIds((prev) =>
+      prev.filter(
+        (key) =>
+          !key.endsWith(`:${itemId}`) && !key.startsWith(`weapon-attack:${itemId}:`),
+      ),
+    );
   };
-
-  useEffect(() => () => clearLongPressTimer(), []);
 
   // ─── Drag & drop ─────────────────────────────────────────────────────────
   const onItemDragStart = (item: InventoryItem) => {
@@ -2369,8 +2411,9 @@ export default function App() {
     if (selectedClass !== "Wizard" || levelNumber < 7 || wizardCounterspellCharges <= 0) return;
 
     setWizardCounterspellCharges((prev) => prev - 1);
-    setWizardSpellSlots((prev) => prev + 1);
-    addLog("🛡 Counterspell — you captured spell slots from an enemy spellcaster's casting.", "info");
+    const roll = rollD(20);
+    const total = roll + effectiveStats.INT;
+    addLog(`🛡 Counterspell attempted: ${total} — 1d20 (${roll}) + INT (${effectiveStats.INT})`, "info");
   };
 
   const completeLongRest = () => {
@@ -3024,7 +3067,7 @@ export default function App() {
   };
 
   const activeTheme = abilities
-    .filter((ability) => !ability.hidden && (ability.type === "Scar" || ability.type === "Feat") && ability.themeMode)
+    .filter((ability) => !isCardHidden(`ability:${ability.id}`) && (ability.type === "Scar" || ability.type === "Feat") && ability.themeMode)
     .at(-1)?.themeMode;
   const themeAccent = activeTheme?.accentColor ?? "#c4853a";
   const themeBackground = activeTheme?.backgroundColor ?? "#0a0a0a";
@@ -3253,6 +3296,13 @@ export default function App() {
                     style={{ fontFamily: "'Crimson Pro', serif", color: "#e2cfa0", background: "none", border: "none", cursor: "pointer" }}
                   >
                     Delete Spells
+                  </button>
+                  <button
+                    onClick={() => { unhideAllCards(); setAdminOpen(false); }}
+                    className="text-left px-4 py-2.5 text-sm hover:opacity-80 transition-opacity"
+                    style={{ fontFamily: "'Crimson Pro', serif", color: "#e2cfa0", background: "none", border: "none", cursor: "pointer" }}
+                  >
+                    Unhide All Actions
                   </button>
                 </div>
               )}
@@ -3600,36 +3650,50 @@ export default function App() {
                   <div className="absolute bottom-0 left-0 right-0 h-0.5 opacity-0 group-hover:opacity-100 transition-opacity" style={{ background: "#c4853a" }} />
                 </button>
 
-                {abilities.filter(isTruePassiveAbility).filter((ability) => !ability.hidden).map((ability) => (
+                {abilities.filter(isTruePassiveAbility).filter((ability) => !isCardHidden(`ability:${ability.id}`)).map((ability) => (
                   <div
                     key={`passive-${ability.id}`}
                     className="w-full py-3 px-4"
                     style={{ background: "linear-gradient(135deg, #101008, #17130a)", border: "1px solid rgba(196,133,58,0.2)", borderRadius: 5 }}
-                    onMouseDown={beginLongPress(() => setHidePrompt({ kind: "ability", key: String(ability.id), label: ability.name }))}
-                    onMouseUp={cancelLongPress}
-                    onMouseLeave={cancelLongPress}
-                    onTouchStart={beginLongPress(() => setHidePrompt({ kind: "ability", key: String(ability.id), label: ability.name }))}
-                    onTouchEnd={cancelLongPress}
-                    onTouchCancel={cancelLongPress}
-                    onClickCapture={handleCardClickCapture}
                   >
                     <div className="flex items-center justify-between gap-2 mb-1">
                       <div className="text-sm font-bold" style={{ fontFamily: "'Cinzel', serif", color: "#e2cfa0" }}>{ability.name}</div>
-                      <span
-                        className="text-[10px] uppercase tracking-[0.2em]"
-                        style={{ color: "#9a8a6a", fontFamily: "'Cinzel', serif" }}
-                      >
-                        Passive
+                      <span className="flex items-center">
+                        <span
+                          className="text-[10px] uppercase tracking-[0.2em]"
+                          style={{ color: "#9a8a6a", fontFamily: "'Cinzel', serif" }}
+                        >
+                          Passive
+                        </span>
+                        <ExpandCaret expanded={!!expandedCards[`ability:${ability.id}`]} onToggle={() => toggleCardExpanded(`ability:${ability.id}`)} />
                       </span>
                     </div>
-                    <div className="text-xs" style={{ color: "#9a8a6a", fontFamily: "'Crimson Pro', serif" }}>
-                      {ability.description || "Passive ability."}
-                    </div>
+                    {!!expandedCards[`ability:${ability.id}`] ? (
+                      <div className="text-xs leading-relaxed" style={{ color: "#9a8a6a", fontFamily: "'Crimson Pro', serif", whiteSpace: "pre-wrap", overflowWrap: "break-word" }}>
+                        {ability.description || "Passive ability."}
+                      </div>
+                    ) : (
+                      <div className="text-xs" style={{ color: "#9a8a6a", fontFamily: "'Crimson Pro', serif" }}>
+                        {ability.description || "Passive ability."}
+                      </div>
+                    )}
+                    {!!expandedCards[`ability:${ability.id}`] ? (
+                      <div className="mt-2 flex justify-end">
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); hideCard(`ability:${ability.id}`); }}
+                          className="px-2 py-0.5 text-[10px] uppercase tracking-widest"
+                          style={{ background: "rgba(196,133,58,0.08)", border: "1px solid rgba(196,133,58,0.3)", borderRadius: 3, color: "#c4853a", fontFamily: "'Cinzel', serif", cursor: "pointer" }}
+                        >
+                          Hide
+                        </button>
+                      </div>
+                    ) : null}
                   </div>
                 ))}
 
                 {abilities
-                  .filter((ability) => !isPassiveAbility(ability) && !ability.hidden)
+                  .filter((ability) => !isPassiveAbility(ability) && !isCardHidden(`ability:${ability.id}`))
                   .map((ability) => {
                     const abilityTotal = ability.tallyFormula
                       ? Math.max(1, evaluateFormula(ability.tallyFormula, levelNumber, effectiveStats))
@@ -3642,30 +3706,46 @@ export default function App() {
                         key={`active-ability-${ability.id}`}
                         className="w-full py-3 px-4"
                         style={{ background: "linear-gradient(135deg, #14100a, #1e1608)", border: "1px solid rgba(196,133,58,0.3)", borderRadius: 5 }}
-                        onMouseDown={beginLongPress(() => setHidePrompt({ kind: "ability", key: String(ability.id), label: ability.name }))}
-                        onMouseUp={cancelLongPress}
-                        onMouseLeave={cancelLongPress}
-                        onTouchStart={beginLongPress(() => setHidePrompt({ kind: "ability", key: String(ability.id), label: ability.name }))}
-                        onTouchEnd={cancelLongPress}
-                        onTouchCancel={cancelLongPress}
-                        onClickCapture={handleCardClickCapture}
                       >
                         <div className="flex items-center justify-between gap-2 mb-1">
                           <div className="text-sm font-bold" style={{ fontFamily: "'Cinzel', serif", color: "#e2cfa0" }}>
                             {ability.name}
                           </div>
-                          {ability.tallyFormula || ability.tally ? (
-                            <span className="text-[10px]" style={{ color: "#c4853a", fontFamily: "'JetBrains Mono', monospace" }}>
-                              {abilityRemaining}/{abilityTotal}
-                            </span>
-                          ) : null}
+                          <span className="flex items-center">
+                            {ability.tallyFormula || ability.tally ? (
+                              <span className="text-[10px]" style={{ color: "#c4853a", fontFamily: "'JetBrains Mono', monospace" }}>
+                                {abilityRemaining}/{abilityTotal}
+                              </span>
+                            ) : null}
+                            <ExpandCaret expanded={!!expandedCards[`ability:${ability.id}`]} onToggle={() => toggleCardExpanded(`ability:${ability.id}`)} />
+                          </span>
                         </div>
-                        <div className="text-xs mb-2" style={{ color: "#9a8a6a", fontFamily: "'Crimson Pro', serif" }}>
-                          {ability.description}
-                        </div>
+                        {!!expandedCards[`ability:${ability.id}`] ? (
+                          <div className="text-xs leading-relaxed mb-2" style={{ color: "#9a8a6a", fontFamily: "'Crimson Pro', serif", whiteSpace: "pre-wrap", overflowWrap: "break-word" }}>
+                            {ability.description}
+                          </div>
+                        ) : (
+                          <div className="text-xs mb-2" style={{ color: "#9a8a6a", fontFamily: "'Crimson Pro', serif" }}>
+                            {ability.description}
+                          </div>
+                        )}
+                        {!!expandedCards[`ability:${ability.id}`] ? (
+                          <div className="mb-2 flex justify-end">
+                            <button
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); hideCard(`ability:${ability.id}`); }}
+                              className="px-2 py-0.5 text-[10px] uppercase tracking-widest"
+                              style={{ background: "rgba(196,133,58,0.08)", border: "1px solid rgba(196,133,58,0.3)", borderRadius: 3, color: "#c4853a", fontFamily: "'Cinzel', serif", cursor: "pointer" }}
+                            >
+                              Hide
+                            </button>
+                          </div>
+                        ) : null}
                         <div className="flex flex-col gap-1">
                           {ability.actions?.map((action, actionIdx) => {
                             const disabled = Boolean(action.consumesTally) && abilityRemaining <= 0;
+                            const abilityActionKey = `ability-action:${ability.id}:${actionIdx}`;
+                            const abilityActionExpanded = !!expandedCards[abilityActionKey];
                             return (
                               <button
                                 key={`${ability.id}-active-action-${actionIdx}`}
@@ -3684,12 +3764,26 @@ export default function App() {
                                   <span className="text-xs font-semibold" style={{ fontFamily: "'Cinzel', serif" }}>
                                     {action.name}{action.consumesTally ? " ♦" : ""}
                                   </span>
-                                  <ActionCostBadge cost={getActionCost(action.description)} />
+                                  <span className="flex items-center">
+                                    <ActionCostBadge cost={getExecutableActionCost(action.description)} />
+                                    {action.description ? (
+                                      <ExpandCaret expanded={abilityActionExpanded} onToggle={() => toggleCardExpanded(abilityActionKey)} />
+                                    ) : null}
+                                  </span>
                                 </div>
                                 {action.description ? (
-                                  <div className="text-xs leading-snug mt-1" style={{ color: "#8a7a5a", fontFamily: "'Crimson Pro', serif" }}>
-                                    {action.description}
-                                  </div>
+                                  abilityActionExpanded ? (
+                                    <div
+                                      className="text-xs leading-relaxed mt-1"
+                                      style={{ color: "#8a7a5a", fontFamily: "'Crimson Pro', serif", whiteSpace: "pre-wrap", overflowWrap: "break-word" }}
+                                    >
+                                      {action.description}
+                                    </div>
+                                  ) : (
+                                    <div className="text-xs leading-snug mt-1" style={{ color: "#8a7a5a", fontFamily: "'Crimson Pro', serif" }}>
+                                      {action.description}
+                                    </div>
+                                  )
                                 ) : null}
                               </button>
                             );
@@ -3703,7 +3797,7 @@ export default function App() {
                   .map(([slotKey, wpn], i) => {
                     if (!wpn) return null;
                     const hiddenEntryKey = `${slotKey}:${wpn.id}`;
-                    if (hiddenEquipmentEntries[hiddenEntryKey]) return null;
+                    if (isCardHidden(hiddenEntryKey)) return null;
                     const normalizedWeapon = normalizeWeaponCharges(wpn);
                   const hasAttackProfile = hasWeaponAttackProfile(normalizedWeapon);
                   const maxCharges = normalizedWeapon.maxCharges;
@@ -3714,24 +3808,38 @@ export default function App() {
                     if (hasPassiveStatBoost(normalizedWeapon) && !hasPassiveDescription(normalizedWeapon.description)) return null;
                     return (
                       <div key={i} style={{ background: "linear-gradient(135deg, #101008, #17130a)", border: "1px solid rgba(196,133,58,0.2)", borderRadius: 5, padding: "10px 14px" }}
-                        onMouseDown={beginLongPress(() => setHidePrompt({ kind: "slot", key: hiddenEntryKey, label: normalizedWeapon.name }))}
-                        onMouseUp={cancelLongPress}
-                        onMouseLeave={cancelLongPress}
-                        onTouchStart={beginLongPress(() => setHidePrompt({ kind: "slot", key: hiddenEntryKey, label: normalizedWeapon.name }))}
-                        onTouchEnd={cancelLongPress}
-                        onTouchCancel={cancelLongPress}
-                        onClickCapture={handleCardClickCapture}
                       >
                         <div className="flex items-center justify-between gap-2 mb-1">
                           <div className="text-sm font-bold" style={{ fontFamily: "'Cinzel', serif", color: "#e2cfa0" }}>{normalizedWeapon.name}</div>
-                          <span className="text-[10px] uppercase tracking-[0.2em]" style={{ color: "#9a8a6a", fontFamily: "'Cinzel', serif" }}>Passive</span>
+                          <span className="flex items-center">
+                            <span className="text-[10px] uppercase tracking-[0.2em]" style={{ color: "#9a8a6a", fontFamily: "'Cinzel', serif" }}>Passive</span>
+                            <ExpandCaret expanded={!!expandedCards[hiddenEntryKey]} onToggle={() => toggleCardExpanded(hiddenEntryKey)} />
+                          </span>
                         </div>
-                        <div className="text-xs" style={{ color: "#9a8a6a", fontFamily: "'Crimson Pro', serif" }}>
-                          {normalizedWeapon.description || "Equipped passive gear effect."}
-                        </div>
+                        {!!expandedCards[hiddenEntryKey] ? (
+                          <div className="text-xs leading-relaxed" style={{ color: "#9a8a6a", fontFamily: "'Crimson Pro', serif", whiteSpace: "pre-wrap", overflowWrap: "break-word" }}>
+                            {normalizedWeapon.description || "Equipped passive gear effect."}
+                          </div>
+                        ) : (
+                          <div className="text-xs" style={{ color: "#9a8a6a", fontFamily: "'Crimson Pro', serif" }}>
+                            {normalizedWeapon.description || "Equipped passive gear effect."}
+                          </div>
+                        )}
                         <div className="text-[10px] mt-1" style={{ color: "#6a5a3a", fontFamily: "'JetBrains Mono', monospace" }}>
                           {getItemBonusSummary(normalizedWeapon).join(" • ")}
                         </div>
+                        {!!expandedCards[hiddenEntryKey] ? (
+                          <div className="mt-2 flex justify-end">
+                            <button
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); hideCard(hiddenEntryKey); }}
+                              className="px-2 py-0.5 text-[10px] uppercase tracking-widest"
+                              style={{ background: "rgba(196,133,58,0.08)", border: "1px solid rgba(196,133,58,0.3)", borderRadius: 3, color: "#c4853a", fontFamily: "'Cinzel', serif", cursor: "pointer" }}
+                            >
+                              Hide
+                            </button>
+                          </div>
+                        ) : null}
                       </div>
                     );
                   }
@@ -3739,20 +3847,28 @@ export default function App() {
                   if (normalizedWeapon.attacks && normalizedWeapon.attacks.length > 0) {
                     return (
                       <div key={i} style={{ background: "linear-gradient(135deg, #14100a, #1e1608)", border: "1px solid rgba(196,133,58,0.3)", borderRadius: 5, padding: "10px 14px" }}
-                        onMouseDown={beginLongPress(() => setHidePrompt({ kind: "slot", key: hiddenEntryKey, label: normalizedWeapon.name }))}
-                        onMouseUp={cancelLongPress}
-                        onMouseLeave={cancelLongPress}
-                        onTouchStart={beginLongPress(() => setHidePrompt({ kind: "slot", key: hiddenEntryKey, label: normalizedWeapon.name }))}
-                        onTouchEnd={cancelLongPress}
-                        onTouchCancel={cancelLongPress}
-                        onClickCapture={handleCardClickCapture}
                       >
                         <div className="flex items-center justify-between gap-2 mb-2">
                           <div className="text-sm font-bold" style={{ fontFamily: "'Cinzel', serif", color: "#e2cfa0" }}>{normalizedWeapon.name}</div>
-                          {maxCharges ? (
-                            <span className="text-xs" style={{ fontFamily: "'JetBrains Mono', monospace", color: "#c4853a" }}>{charges}/{maxCharges}</span>
-                          ) : null}
+                          <span className="flex items-center">
+                            {maxCharges ? (
+                              <span className="text-xs" style={{ fontFamily: "'JetBrains Mono', monospace", color: "#c4853a" }}>{charges}/{maxCharges}</span>
+                            ) : null}
+                            <ExpandCaret expanded={!!expandedCards[hiddenEntryKey]} onToggle={() => toggleCardExpanded(hiddenEntryKey)} />
+                          </span>
                         </div>
+                        {!!expandedCards[hiddenEntryKey] ? (
+                          <div className="mb-2 flex justify-end">
+                            <button
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); hideCard(hiddenEntryKey); }}
+                              className="px-2 py-0.5 text-[10px] uppercase tracking-widest"
+                              style={{ background: "rgba(196,133,58,0.08)", border: "1px solid rgba(196,133,58,0.3)", borderRadius: 3, color: "#c4853a", fontFamily: "'Cinzel', serif", cursor: "pointer" }}
+                            >
+                              Hide
+                            </button>
+                          </div>
+                        ) : null}
                         {hasPassiveDescription(normalizedWeapon.description) ? (
                           <div className="mb-2 px-2 py-1" style={{ background: "rgba(106,170,106,0.08)", border: "1px solid rgba(106,170,106,0.22)", borderRadius: 4 }}>
                             <div className="text-[10px] uppercase tracking-[0.2em] mb-0.5" style={{ color: "#6aaa6a", fontFamily: "'Cinzel', serif" }}>Passive</div>
@@ -3870,23 +3986,23 @@ export default function App() {
                                 : "";
                             const passiveAttack = hasPassiveDescription(atk.description);
                             const noCharges = !passiveAttack && atk.consumesCharge && maxCharges && charges <= 0;
+                            const weaponAttackKey = `weapon-attack:${normalizedWeapon.id}:${atkIdx}`;
+                            const weaponAttackExpanded = !!expandedCards[weaponAttackKey];
                             return (
                               <button key={atkIdx} onClick={() => doWeaponAttack(normalizedWeapon, atkIdx)} disabled={!!noCharges || passiveAttack}
                                 className="w-full py-2 px-3 text-left transition-all hover:opacity-90 active:scale-95"
                                 style={{ background: noCharges || passiveAttack ? "#111008" : "rgba(196,133,58,0.1)", border: `1px solid ${noCharges || passiveAttack ? "rgba(196,133,58,0.1)" : "rgba(196,133,58,0.35)"}`, borderRadius: 4, cursor: noCharges || passiveAttack ? "default" : "pointer", opacity: noCharges || passiveAttack ? 0.65 : 1 }}
-                                onMouseDown={beginLongPress(() => setHidePrompt({ kind: "weapon-attack", key: `${normalizedWeapon.id}:${atkIdx}`, label: atk.name }))}
-                                onMouseUp={cancelLongPress}
-                                onMouseLeave={cancelLongPress}
-                                onTouchStart={beginLongPress(() => setHidePrompt({ kind: "weapon-attack", key: `${normalizedWeapon.id}:${atkIdx}`, label: atk.name }))}
-                                onTouchEnd={cancelLongPress}
-                                onTouchCancel={cancelLongPress}
-                                onClickCapture={handleCardClickCapture}
                               >
                                 <div className="flex items-center justify-between gap-2">
                                   <span className="text-xs font-semibold" style={{ fontFamily: "'Cinzel', serif", color: "#e2cfa0" }}>
                                     {atk.name}{atk.consumesCharge ? " ⚡" : ""}
                                   </span>
-                                  <ActionCostBadge cost={getActionCost(atk.description)} />
+                                  <span className="flex items-center">
+                                    <ActionCostBadge cost={getExecutableActionCost(`${atk.name ?? ""} ${atk.description ?? ""}`.trim())} />
+                                    {atk.description ? (
+                                      <ExpandCaret expanded={weaponAttackExpanded} onToggle={() => toggleCardExpanded(weaponAttackKey)} />
+                                    ) : null}
+                                  </span>
                                 </div>
                                 {(attackPreview || normalizedWeapon.omnivamp) ? (
                                   <div className="text-[10px] mt-0.5" style={{ color: "#9a8a6a", fontFamily: "'JetBrains Mono', monospace" }}>
@@ -3895,9 +4011,18 @@ export default function App() {
                                   </div>
                                 ) : null}
                                 {atk.description ? (
-                                  <div className="text-xs leading-snug mt-1" style={{ color: "#8a7a5a", fontFamily: "'Crimson Pro', serif" }}>
-                                    {atk.description}
-                                  </div>
+                                  weaponAttackExpanded ? (
+                                    <div
+                                      className="text-xs leading-relaxed mt-1"
+                                      style={{ color: "#8a7a5a", fontFamily: "'Crimson Pro', serif", whiteSpace: "pre-wrap", overflowWrap: "break-word" }}
+                                    >
+                                      {atk.description}
+                                    </div>
+                                  ) : (
+                                    <div className="text-xs leading-snug mt-1" style={{ color: "#8a7a5a", fontFamily: "'Crimson Pro', serif" }}>
+                                      {atk.description}
+                                    </div>
+                                  )
                                 ) : null}
                               </button>
                             );
@@ -3910,19 +4035,15 @@ export default function App() {
                   return (
                     <div key={i} className="group relative w-full py-4 px-6 text-left"
                       style={{ background: "linear-gradient(135deg, #14100a, #1e1608)", border: "1px solid rgba(196,133,58,0.3)", borderRadius: 5 }}
-                      onMouseDown={beginLongPress(() => setHidePrompt({ kind: "slot", key: hiddenEntryKey, label: normalizedWeapon.name }))}
-                      onMouseUp={cancelLongPress}
-                      onMouseLeave={cancelLongPress}
-                      onTouchStart={beginLongPress(() => setHidePrompt({ kind: "slot", key: hiddenEntryKey, label: normalizedWeapon.name }))}
-                      onTouchEnd={cancelLongPress}
-                      onTouchCancel={cancelLongPress}
-                      onClickCapture={handleCardClickCapture}
                     >
                       <button onClick={() => doWeaponAttack(normalizedWeapon)} className="w-full text-left transition-all hover:opacity-90 active:scale-95"
                         style={{ background: "transparent", border: "none", padding: 0, cursor: "pointer" }}>
                         <div className="flex items-center justify-between gap-2 mb-1">
                           <div className="text-sm font-bold" style={{ fontFamily: "'Cinzel', serif", color: "#e2cfa0" }}>{normalizedWeapon.name}</div>
-                          <ActionCostBadge cost={getExecutableActionCost(normalizedWeapon.description)} />
+                          <span className="flex items-center">
+                            <ActionCostBadge cost={getExecutableActionCost(`${normalizedWeapon.name ?? ""} ${normalizedWeapon.description ?? ""}`.trim())} />
+                            <ExpandCaret expanded={!!expandedCards[hiddenEntryKey]} onToggle={() => toggleCardExpanded(hiddenEntryKey)} />
+                          </span>
                         </div>
                         <div className="text-xs" style={{ color: "#9a8a6a", fontFamily: "'JetBrains Mono', monospace" }}>
                           {normalizedWeapon.weaponFormula
@@ -3936,6 +4057,18 @@ export default function App() {
                           {normalizedWeapon.omnivamp ? ` • omnivamp ${normalizedWeapon.omnivamp}%` : null}
                         </div>
                       </button>
+                      {!!expandedCards[hiddenEntryKey] ? (
+                        <div className="mt-2 flex justify-end">
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); hideCard(hiddenEntryKey); }}
+                            className="px-2 py-0.5 text-[10px] uppercase tracking-widest"
+                            style={{ background: "rgba(196,133,58,0.08)", border: "1px solid rgba(196,133,58,0.3)", borderRadius: 3, color: "#c4853a", fontFamily: "'Cinzel', serif", cursor: "pointer" }}
+                          >
+                            Hide
+                          </button>
+                        </div>
+                      ) : null}
                       {hasPassiveDescription(normalizedWeapon.description) ? (
                         <div className="mt-2 px-2 py-1" style={{ background: "rgba(106,170,106,0.08)", border: "1px solid rgba(106,170,106,0.22)", borderRadius: 4 }}>
                           <div className="text-[10px] uppercase tracking-[0.2em] mb-0.5" style={{ color: "#6aaa6a", fontFamily: "'Cinzel', serif" }}>Passive</div>
@@ -4105,7 +4238,7 @@ export default function App() {
                         </div>
                       </div>
                       <p className="text-xs mb-2" style={{ color: "#9a8a6a", fontFamily: "'Crimson Pro', serif" }}>
-                        Reaction: when an enemy spellcaster is interrupted, capture their spell slots and gain them as available spell slots.
+                        Reaction: attempt to interrupt an enemy spellcaster's casting — roll 1d20 + INT. The DM adjudicates success (DC 10 + enemy INT) and any spell slot recovery.
                       </p>
                       <button
                         onClick={useCounterspell}
@@ -4219,7 +4352,7 @@ export default function App() {
                     {spells.length === 0 && (
                       <p className="text-[10px] italic" style={{ color: "#3a3020", fontFamily: "'Crimson Pro', serif" }}>No spells yet.</p>
                     )}
-                    {spells.map((spell) => {
+                    {spells.filter((spell) => !isCardHidden(`spell:${spell.id}`)).map((spell) => {
                       const minSlotCost = Math.max(1, spell.slotCost ?? 1);
                       const maxSelectableSlotCost = Math.max(
                         minSlotCost,
@@ -4233,20 +4366,49 @@ export default function App() {
                         Math.min(spellSlotSelections[spell.id] ?? minSlotCost, maxSelectableSlotCost),
                       );
                       const canChooseSlots = maxSelectableSlotCost > minSlotCost;
+                      const spellKey = `spell:${spell.id}`;
+                      const spellExpanded = !!expandedCards[spellKey];
 
                       return (<div key={spell.id} style={{ background: "rgba(106,154,224,0.08)", border: "1px solid rgba(106,154,224,0.2)", borderRadius: 4, padding: "8px 10px", overflow: "hidden" }}>
                         <div className="flex items-center justify-between gap-2">
                           <div className="flex-1">
                             <div className="text-xs font-semibold" style={{ fontFamily: "'Cinzel', serif", color: "#e2cfa0" }}>{spell.name}</div>
-                            <p className="mt-0.5 text-[10px] leading-snug" style={{ color: "#9a8a6a", fontFamily: "'Crimson Pro', serif" }}>
-                              {spell.description}
-                            </p>
+                            {spellExpanded ? (
+                              <p
+                                className="mt-0.5 text-[10px] leading-relaxed"
+                                style={{ color: "#9a8a6a", fontFamily: "'Crimson Pro', serif", whiteSpace: "pre-wrap", overflowWrap: "break-word" }}
+                              >
+                                {spell.description}
+                              </p>
+                            ) : (
+                              <p className="mt-0.5 text-[10px] leading-snug" style={{ color: "#9a8a6a", fontFamily: "'Crimson Pro', serif" }}>
+                                {spell.description}
+                              </p>
+                            )}
                           </div>
-                          <button onClick={() => setSpells((prev) => prev.filter((s) => s.id !== spell.id))}
-                            style={{ background: "none", border: "none", cursor: "pointer", color: "#3a2020", padding: 0, lineHeight: 1, flexShrink: 0 }}>
-                            <X size={10} />
-                          </button>
+                          <div className="flex items-center" style={{ flexShrink: 0 }}>
+                            <ActionCostBadge cost={getExecutableActionCost(spell.description)} />
+                            {spell.description ? (
+                              <ExpandCaret expanded={spellExpanded} onToggle={() => toggleCardExpanded(spellKey)} />
+                            ) : null}
+                            <button onClick={() => setSpells((prev) => prev.filter((s) => s.id !== spell.id))}
+                              style={{ background: "none", border: "none", cursor: "pointer", color: "#3a2020", padding: 0, lineHeight: 1, flexShrink: 0, marginLeft: 4 }}>
+                              <X size={10} />
+                            </button>
+                          </div>
                         </div>
+                        {spellExpanded ? (
+                          <div className="mt-1 flex justify-end">
+                            <button
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); hideCard(spellKey); }}
+                              className="px-2 py-0.5 text-[10px] uppercase tracking-widest"
+                              style={{ background: "rgba(106,154,224,0.08)", border: "1px solid rgba(106,154,224,0.3)", borderRadius: 3, color: "#6a9ae0", fontFamily: "'Cinzel', serif", cursor: "pointer" }}
+                            >
+                              Hide
+                            </button>
+                          </div>
+                        ) : null}
                         <div className="flex flex-wrap gap-1 mt-2">
                           <div className="flex items-center gap-1">
                             <span className="text-[9px]" style={{ color: "#6a9ae0", fontFamily: "'Cinzel', serif" }}>Slots</span>
@@ -5929,23 +6091,6 @@ export default function App() {
               </button>
               <button onClick={startWizardSignatureSpell} className="px-4 py-2 text-sm font-semibold" style={{ background: "linear-gradient(135deg, #101a2b, #1b2e45)", border: "1px solid rgba(106,154,224,0.4)", borderRadius: 4, color: "#6a9ae0", fontFamily: "'Cinzel', serif", cursor: "pointer" }}>
                 Got It
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {hidePrompt && (
-        <div className="fixed inset-0 flex items-center justify-center z-60" style={{ background: "rgba(0,0,0,0.7)" }} onClick={() => setHidePrompt(null)}>
-          <div className="p-6 flex flex-col gap-4 w-full max-w-sm" style={{ background: "#0e0c08", border: "1px solid rgba(196,133,58,0.4)", borderRadius: 8 }} onClick={(e) => e.stopPropagation()}>
-            <div className="text-base font-bold" style={{ fontFamily: "'Cinzel', serif", color: "#c4853a" }}>Hide this ability?</div>
-            <div className="text-sm" style={{ color: "#9a8a6a", fontFamily: "'Crimson Pro', serif" }}>{hidePrompt?.label}</div>
-            <div className="flex justify-end gap-2">
-              <button onClick={() => setHidePrompt(null)} className="px-4 py-2 text-sm" style={{ background: "#111008", border: "1px solid rgba(196,133,58,0.2)", borderRadius: 4, color: "#9a8a6a", fontFamily: "'Cinzel', serif", cursor: "pointer" }}>
-                No
-              </button>
-              <button onClick={confirmHidePrompt} className="px-4 py-2 text-sm font-semibold" style={{ background: "linear-gradient(135deg, #1a1208, #241a0c)", border: "1px solid rgba(196,133,58,0.4)", borderRadius: 4, color: "#c4853a", fontFamily: "'Cinzel', serif", cursor: "pointer" }}>
-                Yes
               </button>
             </div>
           </div>
