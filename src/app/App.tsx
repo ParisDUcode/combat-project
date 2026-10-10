@@ -330,23 +330,34 @@ const ActionCostBadge = ({ cost }: { cost: ActionCost }) => (
 
 // In-flow expand caret rendered after the action badge in a card header's right cluster.
 // Boxed but height-capped to the header line so it never alters card dimensions. Clicking it
-// opens a detail modal. Stops propagation so card roll/cast handlers never fire.
+// opens a detail modal. Fully isolated (stopPropagation + preventDefault) so card roll/cast
+// handlers never fire.
 const ExpandCaret = ({ onOpen }: { onOpen: () => void }) => {
   const [hover, setHover] = useState(false);
+
+  const handleCaretClick = (e: React.MouseEvent<HTMLButtonElement>) => {
+    e.stopPropagation();
+    e.preventDefault();
+    onOpen();
+  };
+
   return (
     <button
       type="button"
       aria-label="View details"
       title="View details"
-      onClick={(e) => {
+      onClick={handleCaretClick}
+      onMouseDown={(e) => {
         e.stopPropagation();
-        onOpen();
+        e.preventDefault();
       }}
-      onMouseDown={(e) => e.stopPropagation()}
       onTouchStart={(e) => e.stopPropagation()}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
       style={{
+        position: "relative",
+        zIndex: 10,
+        pointerEvents: "auto",
         alignSelf: "center",
         height: "100%",
         maxHeight: "1.5em",
