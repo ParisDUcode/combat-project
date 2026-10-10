@@ -328,7 +328,8 @@ const ActionCostBadge = ({ cost }: { cost: ActionCost }) => (
   </span>
 );
 
-// Isolated expand caret pinned to a card's top-right corner. Boxed 32x32 target; clicking it
+// In-flow expand caret rendered after the action badge in a card header's right cluster.
+// Boxed but height-capped to the header line so it never alters card dimensions. Clicking it
 // opens a detail modal. Stops propagation so card roll/cast handlers never fire.
 const ExpandCaret = ({ onOpen }: { onOpen: () => void }) => {
   const [hover, setHover] = useState(false);
@@ -346,12 +347,10 @@ const ExpandCaret = ({ onOpen }: { onOpen: () => void }) => {
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
       style={{
-        position: "absolute",
-        top: 8,
-        right: 8,
-        zIndex: 10,
-        width: 32,
-        height: 32,
+        alignSelf: "center",
+        height: "100%",
+        maxHeight: "1.5em",
+        aspectRatio: "1 / 1",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
@@ -362,7 +361,7 @@ const ExpandCaret = ({ onOpen }: { onOpen: () => void }) => {
         color: hover ? "#e2cfa0" : "#8a7a5a",
         padding: 0,
         lineHeight: 1,
-        fontSize: 13,
+        fontSize: 12,
         flexShrink: 0,
         transition: "border-color 120ms ease, background 120ms ease",
       }}
@@ -3774,19 +3773,21 @@ export default function App() {
                     className="w-full py-3 px-4"
                     style={{ position: "relative", background: "linear-gradient(135deg, #101008, #17130a)", border: "1px solid rgba(196,133,58,0.2)", borderRadius: 5 }}
                   >
-                    <ExpandCaret onOpen={() => openCardDetail({
-                      title: ability.name,
-                      cost: "action",
-                      description: ability.description || "Passive ability.",
-                      onHide: () => hideCard(`ability:${ability.id}`),
-                    })} />
                     <div className="flex items-center justify-between gap-2 mb-1">
                       <div className="text-sm font-bold" style={{ fontFamily: "'Cinzel', serif", color: "#e2cfa0" }}>{ability.name}</div>
-                      <span
-                        className="text-[10px] uppercase tracking-[0.2em]"
-                        style={{ color: "#9a8a6a", fontFamily: "'Cinzel', serif" }}
-                      >
-                        Passive
+                      <span className="flex items-center gap-2" style={{ flexShrink: 0 }}>
+                        <span
+                          className="text-[10px] uppercase tracking-[0.2em]"
+                          style={{ color: "#9a8a6a", fontFamily: "'Cinzel', serif" }}
+                        >
+                          Passive
+                        </span>
+                        <ExpandCaret onOpen={() => openCardDetail({
+                          title: ability.name,
+                          cost: "action",
+                          description: ability.description || "Passive ability.",
+                          onHide: () => hideCard(`ability:${ability.id}`),
+                        })} />
                       </span>
                     </div>
                     <div className="text-xs" style={{ color: "#9a8a6a", fontFamily: "'Crimson Pro', serif" }}>
@@ -3810,21 +3811,23 @@ export default function App() {
                         className="w-full py-3 px-4"
                         style={{ position: "relative", background: "linear-gradient(135deg, #14100a, #1e1608)", border: "1px solid rgba(196,133,58,0.3)", borderRadius: 5 }}
                       >
-                        <ExpandCaret onOpen={() => openCardDetail({
-                          title: ability.name,
-                          cost: "action",
-                          description: ability.description,
-                          onHide: () => hideCard(`ability:${ability.id}`),
-                        })} />
                         <div className="flex items-center justify-between gap-2 mb-1">
                           <div className="text-sm font-bold" style={{ fontFamily: "'Cinzel', serif", color: "#e2cfa0" }}>
                             {ability.name}
                           </div>
-                          {ability.tallyFormula || ability.tally ? (
-                            <span className="text-[10px]" style={{ color: "#c4853a", fontFamily: "'JetBrains Mono', monospace" }}>
-                              {abilityRemaining}/{abilityTotal}
-                            </span>
-                          ) : null}
+                          <span className="flex items-center gap-2" style={{ flexShrink: 0 }}>
+                            {ability.tallyFormula || ability.tally ? (
+                              <span className="text-[10px]" style={{ color: "#c4853a", fontFamily: "'JetBrains Mono', monospace" }}>
+                                {abilityRemaining}/{abilityTotal}
+                              </span>
+                            ) : null}
+                            <ExpandCaret onOpen={() => openCardDetail({
+                              title: ability.name,
+                              cost: "action",
+                              description: ability.description,
+                              onHide: () => hideCard(`ability:${ability.id}`),
+                            })} />
+                          </span>
                         </div>
                         <div className="text-xs mb-2" style={{ color: "#9a8a6a", fontFamily: "'Crimson Pro', serif" }}>
                           {ability.description}
@@ -3847,18 +3850,20 @@ export default function App() {
                                   cursor: disabled ? "default" : "pointer",
                                 }}
                               >
-                                {action.description ? (
-                                  <ExpandCaret onOpen={() => openCardDetail({
-                                    title: action.name,
-                                    cost: getExecutableActionCost(action.description),
-                                    description: action.description ?? "",
-                                  })} />
-                                ) : null}
                                 <div className="flex items-center justify-between gap-2">
                                   <span className="text-xs font-semibold" style={{ fontFamily: "'Cinzel', serif" }}>
                                     {action.name}{action.consumesTally ? " ♦" : ""}
                                   </span>
-                                  <ActionCostBadge cost={getExecutableActionCost(action.description)} />
+                                  <span className="flex items-center gap-2" style={{ flexShrink: 0 }}>
+                                    <ActionCostBadge cost={getExecutableActionCost(action.description)} />
+                                    {action.description ? (
+                                      <ExpandCaret onOpen={() => openCardDetail({
+                                        title: action.name,
+                                        cost: getExecutableActionCost(action.description),
+                                        description: action.description ?? "",
+                                      })} />
+                                    ) : null}
+                                  </span>
                                 </div>
                                 {action.description ? (
                                   <div className="text-xs leading-snug mt-1" style={{ color: "#8a7a5a", fontFamily: "'Crimson Pro', serif" }}>
@@ -3889,15 +3894,17 @@ export default function App() {
                     return (
                       <div key={i} style={{ position: "relative", background: "linear-gradient(135deg, #101008, #17130a)", border: "1px solid rgba(196,133,58,0.2)", borderRadius: 5, padding: "10px 14px" }}
                       >
-                        <ExpandCaret onOpen={() => openCardDetail({
-                          title: normalizedWeapon.name,
-                          cost: "action",
-                          description: normalizedWeapon.description || "Equipped passive gear effect.",
-                          onHide: () => hideCard(hiddenEntryKey),
-                        })} />
                         <div className="flex items-center justify-between gap-2 mb-1">
                           <div className="text-sm font-bold" style={{ fontFamily: "'Cinzel', serif", color: "#e2cfa0" }}>{normalizedWeapon.name}</div>
-                          <span className="text-[10px] uppercase tracking-[0.2em]" style={{ color: "#9a8a6a", fontFamily: "'Cinzel', serif" }}>Passive</span>
+                          <span className="flex items-center gap-2" style={{ flexShrink: 0 }}>
+                            <span className="text-[10px] uppercase tracking-[0.2em]" style={{ color: "#9a8a6a", fontFamily: "'Cinzel', serif" }}>Passive</span>
+                            <ExpandCaret onOpen={() => openCardDetail({
+                              title: normalizedWeapon.name,
+                              cost: "action",
+                              description: normalizedWeapon.description || "Equipped passive gear effect.",
+                              onHide: () => hideCard(hiddenEntryKey),
+                            })} />
+                          </span>
                         </div>
                         <div className="text-xs" style={{ color: "#9a8a6a", fontFamily: "'Crimson Pro', serif" }}>
                           {normalizedWeapon.description || "Equipped passive gear effect."}
@@ -3913,17 +3920,19 @@ export default function App() {
                     return (
                       <div key={i} style={{ position: "relative", background: "linear-gradient(135deg, #14100a, #1e1608)", border: "1px solid rgba(196,133,58,0.3)", borderRadius: 5, padding: "10px 14px" }}
                       >
-                        <ExpandCaret onOpen={() => openCardDetail({
-                          title: normalizedWeapon.name,
-                          cost: getExecutableActionCost(`${normalizedWeapon.name ?? ""} ${normalizedWeapon.description ?? ""}`.trim()),
-                          description: normalizedWeapon.description || "No description.",
-                          onHide: () => hideCard(hiddenEntryKey),
-                        })} />
                         <div className="flex items-center justify-between gap-2 mb-2">
                           <div className="text-sm font-bold" style={{ fontFamily: "'Cinzel', serif", color: "#e2cfa0" }}>{normalizedWeapon.name}</div>
-                          {maxCharges ? (
-                            <span className="text-xs" style={{ fontFamily: "'JetBrains Mono', monospace", color: "#c4853a" }}>{charges}/{maxCharges}</span>
-                          ) : null}
+                          <span className="flex items-center gap-2" style={{ flexShrink: 0 }}>
+                            {maxCharges ? (
+                              <span className="text-xs" style={{ fontFamily: "'JetBrains Mono', monospace", color: "#c4853a" }}>{charges}/{maxCharges}</span>
+                            ) : null}
+                            <ExpandCaret onOpen={() => openCardDetail({
+                              title: normalizedWeapon.name,
+                              cost: getExecutableActionCost(`${normalizedWeapon.name ?? ""} ${normalizedWeapon.description ?? ""}`.trim()),
+                              description: normalizedWeapon.description || "No description.",
+                              onHide: () => hideCard(hiddenEntryKey),
+                            })} />
+                          </span>
                         </div>
                         {hasPassiveDescription(normalizedWeapon.description) ? (
                           <div className="mb-2 px-2 py-1" style={{ background: "rgba(106,170,106,0.08)", border: "1px solid rgba(106,170,106,0.22)", borderRadius: 4 }}>
@@ -4048,19 +4057,21 @@ export default function App() {
                                 className="w-full py-2 px-3 text-left transition-all hover:opacity-90 active:scale-95"
                                 style={{ position: "relative", background: noCharges || passiveAttack ? "#111008" : "rgba(196,133,58,0.1)", border: `1px solid ${noCharges || passiveAttack ? "rgba(196,133,58,0.1)" : "rgba(196,133,58,0.35)"}`, borderRadius: 4, cursor: noCharges || passiveAttack ? "default" : "pointer", opacity: noCharges || passiveAttack ? 0.65 : 1 }}
                               >
-                                {atk.description ? (
-                                  <ExpandCaret onOpen={() => openCardDetail({
-                                    title: atk.name,
-                                    cost: getExecutableActionCost(`${atk.name ?? ""} ${atk.description ?? ""}`.trim()),
-                                    description: atk.description || "",
-                                    formula: attackPreview || undefined,
-                                  })} />
-                                ) : null}
                                 <div className="flex items-center justify-between gap-2">
                                   <span className="text-xs font-semibold" style={{ fontFamily: "'Cinzel', serif", color: "#e2cfa0" }}>
                                     {atk.name}{atk.consumesCharge ? " ⚡" : ""}
                                   </span>
-                                  <ActionCostBadge cost={getExecutableActionCost(`${atk.name ?? ""} ${atk.description ?? ""}`.trim())} />
+                                  <span className="flex items-center gap-2" style={{ flexShrink: 0 }}>
+                                    <ActionCostBadge cost={getExecutableActionCost(`${atk.name ?? ""} ${atk.description ?? ""}`.trim())} />
+                                    {atk.description ? (
+                                      <ExpandCaret onOpen={() => openCardDetail({
+                                        title: atk.name,
+                                        cost: getExecutableActionCost(`${atk.name ?? ""} ${atk.description ?? ""}`.trim()),
+                                        description: atk.description || "",
+                                        formula: attackPreview || undefined,
+                                      })} />
+                                    ) : null}
+                                  </span>
                                 </div>
                                 {(attackPreview || normalizedWeapon.omnivamp) ? (
                                   <div className="text-[10px] mt-0.5" style={{ color: "#9a8a6a", fontFamily: "'JetBrains Mono', monospace" }}>
@@ -4085,17 +4096,19 @@ export default function App() {
                     <div key={i} className="group relative w-full py-4 px-6 text-left"
                       style={{ background: "linear-gradient(135deg, #14100a, #1e1608)", border: "1px solid rgba(196,133,58,0.3)", borderRadius: 5 }}
                     >
-                      <ExpandCaret onOpen={() => openCardDetail({
-                        title: normalizedWeapon.name,
-                        cost: getExecutableActionCost(`${normalizedWeapon.name ?? ""} ${normalizedWeapon.description ?? ""}`.trim()),
-                        description: normalizedWeapon.description || "No description.",
-                        onHide: () => hideCard(hiddenEntryKey),
-                      })} />
                       <button onClick={() => doWeaponAttack(normalizedWeapon)} className="w-full text-left transition-all hover:opacity-90 active:scale-95"
                         style={{ background: "transparent", border: "none", padding: 0, cursor: "pointer" }}>
                         <div className="flex items-center justify-between gap-2 mb-1">
                           <div className="text-sm font-bold" style={{ fontFamily: "'Cinzel', serif", color: "#e2cfa0" }}>{normalizedWeapon.name}</div>
-                          <ActionCostBadge cost={getExecutableActionCost(`${normalizedWeapon.name ?? ""} ${normalizedWeapon.description ?? ""}`.trim())} />
+                          <span className="flex items-center gap-2" style={{ flexShrink: 0 }}>
+                            <ActionCostBadge cost={getExecutableActionCost(`${normalizedWeapon.name ?? ""} ${normalizedWeapon.description ?? ""}`.trim())} />
+                            <ExpandCaret onOpen={() => openCardDetail({
+                              title: normalizedWeapon.name,
+                              cost: getExecutableActionCost(`${normalizedWeapon.name ?? ""} ${normalizedWeapon.description ?? ""}`.trim()),
+                              description: normalizedWeapon.description || "No description.",
+                              onHide: () => hideCard(hiddenEntryKey),
+                            })} />
+                          </span>
                         </div>
                         <div className="text-xs" style={{ color: "#9a8a6a", fontFamily: "'JetBrains Mono', monospace" }}>
                           {normalizedWeapon.weaponFormula
@@ -4414,16 +4427,6 @@ export default function App() {
                           : undefined;
 
                       return (<div key={spell.id} style={{ position: "relative", background: "rgba(106,154,224,0.08)", border: "1px solid rgba(106,154,224,0.2)", borderRadius: 4, padding: "8px 10px", overflow: "hidden" }}>
-                        {spell.description ? (
-                          <ExpandCaret onOpen={() => openCardDetail({
-                            title: spell.name,
-                            cost: getExecutableActionCost(spell.description),
-                            description: spell.description,
-                            formula: spellFormulaBadge,
-                            slotBadge: `Slots ${minSlotCost}${canChooseSlots ? `–${maxSelectableSlotCost}` : ""}`,
-                            onHide: () => hideCard(spellKey),
-                          })} />
-                        ) : null}
                         <div className="flex items-center justify-between gap-2">
                           <div className="flex-1">
                             <div className="text-xs font-semibold" style={{ fontFamily: "'Cinzel', serif", color: "#e2cfa0" }}>{spell.name}</div>
@@ -4431,10 +4434,20 @@ export default function App() {
                               {spell.description}
                             </p>
                           </div>
-                          <div className="flex items-center" style={{ flexShrink: 0 }}>
+                          <div className="flex items-center gap-2" style={{ flexShrink: 0 }}>
                             <ActionCostBadge cost={getExecutableActionCost(spell.description)} />
+                            {spell.description ? (
+                              <ExpandCaret onOpen={() => openCardDetail({
+                                title: spell.name,
+                                cost: getExecutableActionCost(spell.description),
+                                description: spell.description,
+                                formula: spellFormulaBadge,
+                                slotBadge: `Slots ${minSlotCost}${canChooseSlots ? `–${maxSelectableSlotCost}` : ""}`,
+                                onHide: () => hideCard(spellKey),
+                              })} />
+                            ) : null}
                             <button onClick={() => setSpells((prev) => prev.filter((s) => s.id !== spell.id))}
-                              style={{ background: "none", border: "none", cursor: "pointer", color: "#3a2020", padding: 0, lineHeight: 1, flexShrink: 0, marginLeft: 4 }}>
+                              style={{ background: "none", border: "none", cursor: "pointer", color: "#3a2020", padding: 0, lineHeight: 1, flexShrink: 0 }}>
                               <X size={10} />
                             </button>
                           </div>
