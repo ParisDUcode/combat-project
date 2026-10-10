@@ -23,9 +23,16 @@ const jsSource = fnSource
 
 const getActionType = new Function(`${jsSource}; return getActionType;`)();
 
-test('bonus action via "bonus action" phrase', () => {
-  assert.equal(getActionType('Cast as a bonus action'), 'bonus');
+test('bonus action via "bonus action" phrase in first 4 words', () => {
+  assert.equal(getActionType('Bonus action: cast'), 'bonus');
+  assert.equal(getActionType('Cast as bonus action now'), 'bonus');
   assert.equal(getActionType({ description: 'Use: Bonus Action to dash' }), 'bonus');
+});
+
+test('no bonus when trigger words appear after the first 4 words', () => {
+  assert.equal(getActionType('Cast as a bonus action'), 'action');
+  assert.equal(getActionType('Swing your weapon, then as a reaction strike back'), 'action');
+  assert.equal(getActionType({ description: 'A long description that eventually mentions a reaction much later on' }), 'action');
 });
 
 test('bonus via "reaction" keyword', () => {
@@ -57,6 +64,11 @@ test('scans attack sub-descriptions and title', () => {
   );
   assert.equal(getActionType({ name: 'Quick bonus action jab', description: '' }), 'bonus');
   assert.equal(getActionType({ name: 'Slash', description: 'a normal swing' }), 'action');
+  // trigger word buried past the first 4 words of a sub-description -> action
+  assert.equal(
+    getActionType({ name: 'Slash', attacks: [{ description: 'a mighty swing that counts as a reaction' }] }),
+    'action',
+  );
 });
 
 test('case-insensitive matching', () => {
