@@ -875,6 +875,7 @@ export default function App() {
   // ─── Monster damage intake (per-monster) ─────────────────────────────────
   const [monsterDamageInputs, setMonsterDamageInputs] = useState<Record<string, string>>({});
   const [monsterDamageTypes, setMonsterDamageTypes] = useState<Record<string, "physical" | "magic" | "true">>({});
+  const [monsterHealInputs, setMonsterHealInputs] = useState<Record<string, string>>({});
 
   // ─── Combat action tracker ────────────────────────────────────────────────
   const [actionUsedSlots, setActionUsedSlots] = useState<boolean[]>([false]);
@@ -2463,6 +2464,17 @@ export default function App() {
     logCombat(`${monster.displayName}: ${net} ${typeLabel} damage taken (${raw}${reduction}).`);
   };
 
+  const applyMonsterHealing = (monster: CombatMonster, amount: number) => {
+    const heal = Math.max(0, Math.floor(amount));
+    if (heal <= 0) return;
+    const nextHp = Math.min(monster.def.hp, monster.currentHp + heal);
+    const actual = nextHp - monster.currentHp;
+    setCombatMonsters((prev) =>
+      prev.map((m) => (m.uid === monster.uid ? { ...m, currentHp: nextHp } : m)),
+    );
+    logCombat(`${monster.displayName}: healed ${actual} HP (${nextHp}/${monster.def.hp}).`);
+  };
+
   const triggerMonsterTurnStart = (monsterUid: string) => {
     setCombatMonsters((prev) =>
       prev.map((monster) => {
@@ -2710,7 +2722,7 @@ export default function App() {
       "activeAbilities[] (ActiveAbility): { id, name, target (\"player\"|\"self\"|\"ally\"|\"none\"), formula?, damageType?, effects?, cooldownTurns?, maxCharges?, resourceCost? { resourceId, amount }, description? }.",
       "passiveAbilities[] (PassiveAbility): { id, name, trigger, description?, effects[] }. trigger enum: encounter_start, turn_start, on_attack_hit, on_damaged, on_threshold, on_defeated (aliases attack/hit→on_attack_hit, death→on_defeated, damage_taken→on_damaged).",
       "effects[] (MonsterEffect): { type (\"damage\"|\"heal_self\"|\"resource_gain\"|\"note\"), formula?, damageType?, resourceId?, note? }. 'damage'/'heal_self' roll formula; 'resource_gain' adds to resourcePools[resourceId]; 'note' logs text.",
-      "Monster self-resistance (applyDamageTypeResistance) uses the same STEPPED mitigation as players (AC vs physical, MR vs magic, true bypasses).",
+      "Monster AC/MR mitigation (stepped: 1:1 up to 3, then 2 per +1) applies only to INCOMING damage taken by the monster; it never reduces the monster's own outgoing attack/ability damage.",
       "",
       "═══════════════════════════════════════════════════════════════",
       "IMPORT ROUTES SUMMARY",
@@ -5729,21 +5741,38 @@ export default function App() {
                             );
                           })}
                         </div>
-                        <input
-                          type="number" min={0}
-                          value={monsterDamageInputs[cm.uid] ?? ""}
-                          placeholder="Damage"
-                          onChange={(e) => setMonsterDamageInputs((prev) => ({ ...prev, [cm.uid]: e.target.value }))}
-                          onKeyDown={(e) => {
-                            if (e.key !== "Enter") return;
-                            const raw = monsterDamageInputs[cm.uid];
-                            if (!raw) return;
-                            applyMonsterIncomingDamage(cm, Math.abs(Number(raw)), monsterDamageTypes[cm.uid] ?? "physical");
-                            setMonsterDamageInputs((prev) => ({ ...prev, [cm.uid]: "" }));
-                          }}
-                          className="w-full px-2 py-1 text-[11px] outline-none"
-                          style={{ background: "rgba(139,28,28,0.15)", border: "1px solid rgba(139,28,28,0.4)", borderRadius: 3, color: "#f5c5c5", fontFamily: "'JetBrains Mono', monospace" }}
-                        />
+                        <div className="flex gap-1">
+                          <input
+                            type="number" min={0}
+                            value={monsterDamageInputs[cm.uid] ?? ""}
+                            placeholder="Damage"
+                            onChange={(e) => setMonsterDamageInputs((prev) => ({ ...prev, [cm.uid]: e.target.value }))}
+                            onKeyDown={(e) => {
+                              if (e.key !== "Enter") return;
+                              const raw = monsterDamageInputs[cm.uid];
+                              if (!raw) return;
+                              applyMonsterIncomingDamage(cm, Math.abs(Number(raw)), monsterDamageTypes[cm.uid] ?? "physical");
+                              setMonsterDamageInputs((prev) => ({ ...prev, [cm.uid]: "" }));
+                            }}
+                            className="flex-1 min-w-0 px-2 py-1 text-[11px] outline-none"
+                            style={{ background: "rgba(139,28,28,0.15)", border: "1px solid rgba(139,28,28,0.4)", borderRadius: 3, color: "#f5c5c5", fontFamily: "'JetBrains Mono', monospace" }}
+                          />
+                          <input
+                            type="number" min={0}
+                            value={monsterHealInputs[cm.uid] ?? ""}
+                            placeholder="Heal"
+                            onChange={(e) => setMonsterHealInputs((prev) => ({ ...prev, [cm.uid]: e.target.value }))}
+                            onKeyDown={(e) => {
+                              if (e.key !== "Enter") return;
+                              const raw = monsterHealInputs[cm.uid];
+                              if (!raw) return;
+                              applyMonsterHealing(cm, Math.abs(Number(raw)));
+                              setMonsterHealInputs((prev) => ({ ...prev, [cm.uid]: "" }));
+                            }}
+                            className="flex-1 min-w-0 px-2 py-1 text-[11px] outline-none"
+                            style={{ background: "rgba(90,170,90,0.1)", border: "1px solid rgba(90,170,90,0.35)", borderRadius: 3, color: "#7acc7a", fontFamily: "'JetBrains Mono', monospace" }}
+                          />
+                        </div>
                       </div>
                       {/* Compact stats */}
                       <div className="flex gap-1 flex-wrap">

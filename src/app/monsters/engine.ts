@@ -30,26 +30,6 @@ export interface AttackResolution {
   effectLines: string[];
 }
 
-// Stepped, diminishing-returns mitigation: 1:1 up to 3 defense, then 2 defense per +1 mitigation.
-const computeMitigation = (defense: number): number => {
-  const def = Math.max(0, Math.floor(defense));
-  return def <= 3 ? def : 3 + Math.floor((def - 3) / 2);
-};
-
-const applyDamageTypeResistance = (
-  rawDamage: number,
-  damageType: MonsterDefinition["attacks"][number]["damageType"] | ActiveAbility["damageType"] | MonsterEffect["damageType"],
-  monster: MonsterDefinition,
-): number => {
-  if (damageType === "magic") {
-    return Math.max(0, rawDamage - computeMitigation(monster.mr));
-  }
-  if (damageType === "physical") {
-    return Math.max(0, rawDamage - computeMitigation(monster.ac));
-  }
-  return rawDamage;
-};
-
 export interface AbilityResolution {
   runtime: MonsterCombatRuntime;
   canUse: boolean;
@@ -172,8 +152,8 @@ export const resolveMonsterAttack = (
 ): AttackResolution => {
   const roll = applyFormula(attack.formula, monster.stats);
   const passive = resolvePassiveTrigger(monster, runtime, "on_attack_hit");
-  const rawDamage = Math.max(0, roll.total + passive.bonusDamage);
-  const totalDamage = applyDamageTypeResistance(rawDamage, attack.damageType, monster);
+  // Outgoing damage is the raw formula total; the attacker's own AC/MR must not reduce it.
+  const totalDamage = Math.max(0, roll.total + passive.bonusDamage);
   const logLine = `${monster.name}: ${totalDamage} Damage`;
 
   const effectLines: string[] = [];
@@ -254,7 +234,6 @@ export const resolveActiveAbility = (
 
   const roll = applyFormula(ability.formula, monster.stats);
   let damage = ability.target === "player" ? Math.max(0, roll.total) : 0;
-  const baseDamageType = ability.damageType;
   let selfHealing = ability.target === "self" ? Math.max(0, roll.total) : 0;
   const effectLines: string[] = [];
 
@@ -266,10 +245,9 @@ export const resolveActiveAbility = (
     if (outcome.logLine && effect.type !== "damage") effectLines.push(outcome.logLine);
   });
 
-  const resistedDamage = applyDamageTypeResistance(damage, baseDamageType, monster);
-
+  // Outgoing damage is the raw formula total; the attacker's own AC/MR must not reduce it.
   const logLine = ability.target === "player"
-    ? `${monster.name}: ${resistedDamage} Damage`
+    ? `${monster.name}: ${damage} Damage`
     : ability.target === "self"
       ? `${monster.name} restores ${selfHealing} HP.`
       : `${monster.name} uses ${ability.name}.`;
@@ -277,7 +255,7 @@ export const resolveActiveAbility = (
   return {
     runtime: nextRuntime,
     canUse: true,
-    damage: resistedDamage,
+    damage,
     selfHealing,
     logLine,
     effectLines,
