@@ -615,17 +615,6 @@ const getMonsterTier = (monster: MonsterDef): MonsterTier => {
   return "Deadly";
 };
 
-const toAlphabetSuffix = (index: number): string => {
-  let value = index;
-  let suffix = "";
-  while (value > 0) {
-    value -= 1;
-    suffix = String.fromCharCode(97 + (value % 26)) + suffix;
-    value = Math.floor(value / 26);
-  }
-  return suffix;
-};
-
 const withDuplicateFightNames = (entries: FightMonsterEntry[]): Array<FightMonsterEntry & { displayName: string }> => {
   const counts = new Map<string, number>();
   entries.forEach((entry) => {
@@ -641,7 +630,7 @@ const withDuplicateFightNames = (entries: FightMonsterEntry[]): Array<FightMonst
     if (duplicateCount <= 1) return { ...entry, displayName: baseName };
     const index = (seen.get(key) ?? 0) + 1;
     seen.set(key, index);
-    return { ...entry, displayName: `${baseName} ${toAlphabetSuffix(index)}` };
+    return { ...entry, displayName: `${baseName} ${index}` };
   });
 };
 
@@ -843,6 +832,9 @@ export default function App() {
   const [importSpellJsonOpen, setImportSpellJsonOpen] = useState(false);
   const [spellSlotSelections, setSpellSlotSelections] = useState<Record<number, number>>({});
   const [spellTargetSelections, setSpellTargetSelections] = useState<Record<number, "self" | "ally">>({});
+  // null = never customized (legacy saves): first N known spells count as prepared.
+  const [preparedSpellIds, setPreparedSpellIds] = useState<number[] | null>(null);
+  const [spellbookOpen, setSpellbookOpen] = useState(false);
   const [characterLoadJsonText, setCharacterLoadJsonText] = useState("");
   const [characterLoadJsonOpen, setCharacterLoadJsonOpen] = useState(false);
   const [deleteSpellsOpen, setDeleteSpellsOpen] = useState(false);
@@ -867,6 +859,8 @@ export default function App() {
   const [wizardCounterspellCharges, setWizardCounterspellCharges] = useState(0);
   const [wizardSignatureSpellPromptOpen, setWizardSignatureSpellPromptOpen] = useState(false);
   const [wizardSignatureSpellAcknowledged, setWizardSignatureSpellAcknowledged] = useState(false);
+  const [fighterFeatPromptOpen, setFighterFeatPromptOpen] = useState(false);
+  const [fighterFeatAcknowledged, setFighterFeatAcknowledged] = useState(false);
 
   const [damageInput, setDamageInput] = useState("");
   const [healInput, setHealInput] = useState("");
@@ -889,6 +883,7 @@ export default function App() {
 
   // ─── Custom dice ──────────────────────────────────────────────────────────
   const [customDiceCount, setCustomDiceCount] = useState(1);
+  const [dmDiceCount, setDmDiceCount] = useState(1);
 
   // ─── Fight menu ───────────────────────────────────────────────────────────
   const [fightMenuOpen, setFightMenuOpen] = useState(false);
@@ -992,6 +987,7 @@ export default function App() {
       importSpellJsonOpen,
       spellSlotSelections,
       spellTargetSelections,
+      preparedSpellIds,
       hiddenActionIds,
       characterLoadJsonText,
       characterLoadJsonOpen,
@@ -1006,6 +1002,8 @@ export default function App() {
       wizardCounterspellCharges,
       wizardSignatureSpellPromptOpen,
       wizardSignatureSpellAcknowledged,
+      fighterFeatPromptOpen,
+      fighterFeatAcknowledged,
       damageInput,
       healInput,
       damageType,
@@ -1200,6 +1198,7 @@ export default function App() {
     if (d.wizardSpellSlots !== undefined) setWizardSpellSlots(d.wizardSpellSlots);
     if (d.spellSlotSelections !== undefined) setSpellSlotSelections(d.spellSlotSelections);
     if (d.spellTargetSelections !== undefined) setSpellTargetSelections(d.spellTargetSelections);
+    setPreparedSpellIds(Array.isArray(d.preparedSpellIds) ? d.preparedSpellIds.filter((n: unknown) => typeof n === "number") : null);
     if (d.hiddenActionIds !== undefined) setHiddenActionIds(Array.isArray(d.hiddenActionIds) ? d.hiddenActionIds.filter((k: any) => typeof k === "string") : []);
     if (d.spells !== undefined) {
       const loadedSpells = Array.isArray(d.spells) ? d.spells : [];
@@ -1224,6 +1223,8 @@ export default function App() {
     if (d.wizardCounterspellCharges !== undefined) setWizardCounterspellCharges(Number(d.wizardCounterspellCharges) || 0);
     if (d.wizardSignatureSpellPromptOpen !== undefined) setWizardSignatureSpellPromptOpen(Boolean(d.wizardSignatureSpellPromptOpen));
     if (d.wizardSignatureSpellAcknowledged !== undefined) setWizardSignatureSpellAcknowledged(Boolean(d.wizardSignatureSpellAcknowledged));
+    if (d.fighterFeatPromptOpen !== undefined) setFighterFeatPromptOpen(Boolean(d.fighterFeatPromptOpen));
+    if (d.fighterFeatAcknowledged !== undefined) setFighterFeatAcknowledged(Boolean(d.fighterFeatAcknowledged));
     if (d.damageInput !== undefined) setDamageInput(d.damageInput);
     if (d.healInput !== undefined) setHealInput(d.healInput);
     if (d.damageType !== undefined) setDamageType(d.damageType);
@@ -2160,6 +2161,75 @@ export default function App() {
 
   // ─── Hidden cards (unified, persisted via hiddenActionIds) ───────────────
   const isCardHidden = (key: string) => hiddenActionIds.includes(key);
+
+  const preparedCapacity = Math.max(1, (level === "" ? 1 : Number(level)) + Math.ceil(effectiveStats.INT / 2));
+  const preparedIds: number[] = (preparedSpellIds ?? spells.map((s) => s.id))
+    .filter((id) => spells.some((s) => s.id === id))
+    .slice(0, preparedCapacity);
+  const spellbookUnlocked = longRestStep !== null;
+  const togglePreparedSpell = (id: number) => {
+    if (!spellbookUnlocked) return;
+    setPreparedSpellIds(preparedIds.includes(id)
+      ? preparedIds.filter((p) => p !== id)
+      : preparedIds.length < preparedCapacity ? [...preparedIds, id] : preparedIds);
+  };
+
+  const renderSpellbook = () => (
+    <div className="flex flex-col gap-3 text-left w-full">
+      <div style={{ background: "rgba(106,154,224,0.08)", border: "1px solid rgba(106,154,224,0.25)", borderRadius: 5, padding: "8px 10px" }}>
+        <div className="text-xs font-bold" style={{ fontFamily: "'Cinzel', serif", color: "#6a9ae0" }}>ℹ The Spellbook System</div>
+        <p className="text-sm mt-1" style={{ color: "#9a8a6a", fontFamily: "'Crimson Pro', serif" }}>
+          Your spellbook holds all spells you've learned. You may only equip up to your prepared limit: Level + ⌈INT / 2⌉. Spells can only be swapped during a Long Rest. Only prepared spells appear in your combat deck.
+        </p>
+      </div>
+      <div className="text-xs uppercase tracking-widest" style={{ color: spellbookUnlocked ? "#7ab87a" : "#9a8a6a", fontFamily: "'Cinzel', serif" }}>
+        Prepared ({preparedIds.length}/{preparedCapacity}) — {spellbookUnlocked ? "Unlocked" : "Locked until Long Rest"}
+      </div>
+      <div className="grid gap-2" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(120px, 1fr))" }}>
+        {Array.from({ length: preparedCapacity }, (_, i) => {
+          const spell = spells.find((s) => s.id === preparedIds[i]);
+          return spell ? (
+            <button key={i} disabled={!spellbookUnlocked} onClick={() => togglePreparedSpell(spell.id)}
+              draggable={spellbookUnlocked}
+              onDragStart={(e) => e.dataTransfer.setData("text/plain", String(spell.id))}
+              className="text-xs px-2 py-2 text-left"
+              style={{ background: "rgba(106,154,224,0.12)", border: "1px solid rgba(106,154,224,0.4)", borderRadius: 4, color: "#e2cfa0", fontFamily: "'Cinzel', serif", cursor: spellbookUnlocked ? "pointer" : "default", minHeight: 44 }}>
+              {spell.name}
+            </button>
+          ) : (
+            <div key={i}
+              onDragOver={(e) => { if (spellbookUnlocked) e.preventDefault(); }}
+              onDrop={(e) => {
+                e.preventDefault();
+                const id = Number(e.dataTransfer.getData("text/plain"));
+                if (spellbookUnlocked && spells.some((s) => s.id === id) && !preparedIds.includes(id)) togglePreparedSpell(id);
+              }}
+              style={{ border: "1px dashed rgba(196,133,58,0.25)", borderRadius: 4, minHeight: 44, display: "flex", alignItems: "center", justifyContent: "center", color: "#3a3020", fontSize: 11, fontFamily: "'Cinzel', serif" }}>
+              Empty
+            </div>
+          );
+        })}
+      </div>
+      <div className="text-xs uppercase tracking-widest" style={{ color: "#9a8a6a", fontFamily: "'Cinzel', serif" }}>Spellbook Library</div>
+      <div className="flex flex-col gap-1">
+        {spells.length === 0 && <p className="text-xs italic" style={{ color: "#3a3020" }}>No spells known.</p>}
+        {spells.map((spell) => {
+          const prepared = preparedIds.includes(spell.id);
+          const disabled = !spellbookUnlocked || (!prepared && preparedIds.length >= preparedCapacity);
+          return (
+            <button key={spell.id} disabled={disabled} onClick={() => togglePreparedSpell(spell.id)}
+              draggable={spellbookUnlocked && !prepared}
+              onDragStart={(e) => e.dataTransfer.setData("text/plain", String(spell.id))}
+              className="flex items-center justify-between text-xs px-2 py-1.5 text-left"
+              style={{ background: prepared ? "rgba(106,154,224,0.12)" : "rgba(0,0,0,0.3)", border: "1px solid rgba(106,154,224,0.2)", borderRadius: 4, color: "#e2cfa0", fontFamily: "'Cinzel', serif", cursor: disabled ? "default" : "pointer", opacity: disabled && !prepared ? 0.5 : 1 }}>
+              <span>{spell.name}</span>
+              <span style={{ color: "#6a9ae0" }}>{prepared ? (spellbookUnlocked ? "Unequip" : "Prepared") : spellbookUnlocked ? "Equip" : ""}</span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
   const hideCard = (key: string) =>
     setHiddenActionIds((prev) => (prev.includes(key) ? prev : [...prev, key]));
   const unhideAllCards = () => setHiddenActionIds([]);
@@ -2433,7 +2503,24 @@ export default function App() {
 
   const logCombat = (msg: string) => setCombatLog((p) => [msg, ...p].slice(0, 60));
 
-  // Engine log text is generated from def.name; swap in the fight's a/b/c display name.
+  // DM generic dice roller — mirrors rollCustomDie (same rollD engine + multiplier), logs to the combat log.
+  const rollDmDie = (sides: number) => {
+    const count = Math.max(1, Math.floor(dmDiceCount) || 1);
+    const rolls: number[] = [];
+    let total = 0;
+    for (let i = 0; i < count; i++) {
+      const roll = rollD(sides);
+      rolls.push(roll);
+      total += roll;
+    }
+    logCombat(
+      count > 1
+        ? `DM rolled ${count}d${sides}: (${rolls.join(" + ")}) = ${total}`
+        : `DM rolled d${sides}: ${total}`
+    );
+  };
+
+  // Engine log text is generated from def.name; swap in the fight's numbered display name.
   const relabelLog = (monster: CombatMonster, text: string) =>
     monster.displayName === monster.def.name ? text : text.split(monster.def.name).join(monster.displayName);
 
@@ -3146,6 +3233,13 @@ export default function App() {
   }, [selectedClass, levelNumber, wizardSignatureSpellAcknowledged]);
 
   useEffect(() => {
+    if (selectedClass !== "Fighter" || levelNumber < 7) return;
+    if (!fighterFeatAcknowledged) {
+      setFighterFeatPromptOpen(true);
+    }
+  }, [selectedClass, levelNumber, fighterFeatAcknowledged]);
+
+  useEffect(() => {
     if (selectedClass !== "Wizard") return;
     const nextMax = levelNumber >= 7 ? Math.floor((levelNumber - 7) / 2) + 1 : 0;
     setWizardCounterspellCharges((prev) => Math.max(prev, nextMax));
@@ -3470,6 +3564,13 @@ export default function App() {
               Save Character
             </button>
             <button
+              onClick={() => setSpellbookOpen(true)}
+              className="text-xs px-3 py-1.5 hover:opacity-90 transition-opacity"
+              style={{ background: "#0e1218", border: "1px solid rgba(106,154,224,0.35)", borderRadius: 4, color: "#6a9ae0", fontFamily: "'Cinzel', serif", cursor: "pointer" }}
+            >
+              Spellbook
+            </button>
+            <button
               onClick={() => setLongRestStep("confirm")}
               className="text-xs px-3 py-1.5 hover:opacity-90 transition-opacity"
               style={{ background: "#0e0c18", border: "1px solid rgba(106,90,200,0.35)", borderRadius: 4, color: "#9a8acc", fontFamily: "'Cinzel', serif", cursor: "pointer" }}
@@ -3713,9 +3814,11 @@ export default function App() {
                     onChange={(e) => setCurrentHp(e.target.value === "" ? "" : Math.max(0, Number(e.target.value)))}
                     style={{ fontFamily: "'JetBrains Mono', monospace", color: "#e2cfa0", fontSize: 22, fontWeight: 700, background: "transparent", border: "none", outline: "none", width: 60, textAlign: "right" }} />
                   <span style={{ color: "#9a8a6a" }}>/</span>
-                  <input type="number" min={0} value={maxHp === "" ? "" : maxHp} placeholder="—"
-                    onChange={(e) => setMaxHp(e.target.value === "" ? "" : Math.max(0, Number(e.target.value)))}
-                    style={{ fontFamily: "'JetBrains Mono', monospace", color: "#9a8a6a", fontSize: 16, background: "transparent", border: "none", outline: "none", width: 50 }} />
+                  <span
+                    title="Max HP is calculated automatically from your class, level, and CON"
+                    style={{ fontFamily: "'JetBrains Mono', monospace", color: "#9a8a6a", fontSize: 16, minWidth: 50, cursor: "default" }}>
+                    {maxHp === "" ? "—" : maxHp}
+                  </span>
                 </div>
               </div>
               <div className="relative h-5 w-full rounded-sm overflow-hidden mb-4" style={{ background: "#1a1510" }}>
@@ -4462,7 +4565,10 @@ export default function App() {
                     {spells.length === 0 && (
                       <p className="text-[10px] italic" style={{ color: "#3a3020", fontFamily: "'Crimson Pro', serif" }}>No spells yet.</p>
                     )}
-                    {spells.filter((spell) => !isCardHidden(`spell:${spell.id}`)).map((spell) => {
+                    {spells.length > 0 && preparedIds.length === 0 && (
+                      <p className="text-[10px] italic" style={{ color: "#3a3020", fontFamily: "'Crimson Pro', serif" }}>No spells prepared. Open the Spellbook and prepare spells during a Long Rest.</p>
+                    )}
+                    {spells.filter((spell) => preparedIds.includes(spell.id) && !isCardHidden(`spell:${spell.id}`)).map((spell) => {
                       const minSlotCost = Math.max(1, spell.slotCost ?? 1);
                       const maxSelectableSlotCost = Math.max(
                         minSlotCost,
@@ -5591,6 +5697,54 @@ export default function App() {
                     style={{ background: "rgba(196,133,58,0.08)", border: "1px solid rgba(196,133,58,0.2)", borderRadius: 4, color: "#9a8a6a", fontFamily: "'Cinzel', serif", cursor: "pointer" }}>Next ›</button>
                 </div>
               </div>
+              {/* DM dice roller — one shared/global widget, mirrors the character sheet custom dice roller */}
+              <div className="flex items-center gap-1.5">
+                {CUSTOM_DICE_SIDES.map((sides) => (
+                  <button
+                    key={sides}
+                    type="button"
+                    onClick={() => rollDmDie(sides)}
+                    className="px-2 py-1 text-[11px] uppercase tracking-widest transition-all hover:opacity-90 active:scale-95"
+                    style={{
+                      background: "rgba(196,133,58,0.12)",
+                      border: "1px solid rgba(196,133,58,0.35)",
+                      borderRadius: 4,
+                      color: "#c4853a",
+                      fontFamily: "'Cinzel', serif",
+                      cursor: "pointer",
+                    }}
+                  >
+                    {`d${sides}`}
+                  </button>
+                ))}
+                <div className="flex items-center gap-1.5 ml-1">
+                  <span className="text-[10px] uppercase tracking-widest" style={{ color: "#9a8a6a", fontFamily: "'Cinzel', serif" }}>
+                    dice
+                  </span>
+                  <span className="text-[10px]" style={{ color: "#9a8a6a", fontFamily: "'Cinzel', serif" }}>
+                    x
+                  </span>
+                  <input
+                    type="number"
+                    min={1}
+                    step={1}
+                    value={dmDiceCount}
+                    onChange={(e) => setDmDiceCount(Math.max(1, Math.floor(Number(e.target.value) || 1)))}
+                    style={{
+                      width: 44,
+                      background: "rgba(196,133,58,0.12)",
+                      border: "1px solid rgba(196,133,58,0.35)",
+                      borderRadius: 4,
+                      color: "#e2cfa0",
+                      fontFamily: "'JetBrains Mono', monospace",
+                      fontSize: 11,
+                      textAlign: "center",
+                      outline: "none",
+                      padding: "2px 0",
+                    }}
+                  />
+                </div>
+              </div>
               <button onClick={() => setCombatActive(false)} className="px-3 py-1 text-xs hover:opacity-80"
                 style={{ background: "rgba(139,28,28,0.2)", border: "1px solid rgba(139,28,28,0.4)", borderRadius: 4, color: "#f5c5c5", fontFamily: "'Cinzel', serif", cursor: "pointer" }}>
                 End Combat
@@ -5993,17 +6147,30 @@ export default function App() {
         );
       })()}
 
+      {spellbookOpen && !longRestStep && (
+        <div className="fixed inset-0 flex items-center justify-center z-50" style={{ background: "rgba(0,0,0,0.8)" }} onClick={() => setSpellbookOpen(false)}>
+          <div onClick={(e) => e.stopPropagation()} style={{ background: "#0e0c08", border: "1px solid rgba(106,154,224,0.4)", borderRadius: 8, padding: "24px 28px", width: "90%", maxWidth: 560, maxHeight: "85vh", overflowY: "auto" }}>
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-base font-bold" style={{ fontFamily: "'Cinzel', serif", color: "#e2cfa0" }}>Spellbook</h2>
+              <button onClick={() => setSpellbookOpen(false)} style={{ background: "none", border: "none", color: "#9a8a6a", cursor: "pointer" }}><X size={14} /></button>
+            </div>
+            {renderSpellbook()}
+          </div>
+        </div>
+      )}
+
       {/* ── LONG REST MODAL ───────────────────────────────────────────────── */}
       {longRestStep && (
         <div className="fixed inset-0 flex items-center justify-center z-50" style={{ background: "rgba(0,0,0,0.8)" }}>
-          <div className="flex flex-col items-center text-center" style={{ background: "#0e0c08", border: "1px solid rgba(106,90,200,0.4)", borderRadius: 8, padding: "36px 40px", minWidth: 320, maxWidth: 400 }}>
+          <div className="flex flex-col items-center text-center" style={{ background: "#0e0c08", border: "1px solid rgba(106,90,200,0.4)", borderRadius: 8, padding: "28px 32px", width: "90%", maxWidth: 560, maxHeight: "90vh", overflowY: "auto" }}>
 
             {longRestStep === "confirm" && (<>
               <div className="text-4xl mb-4">🌙</div>
               <h2 className="text-base font-bold mb-2" style={{ fontFamily: "'Cinzel', serif", color: "#e2cfa0" }}>Long Rest</h2>
-              <p className="text-sm mb-6" style={{ color: "#9a8a6a", fontFamily: "'Crimson Pro', serif" }}>
-                Are you sure you want to long rest?
+              <p className="text-sm mb-4" style={{ color: "#9a8a6a", fontFamily: "'Crimson Pro', serif" }}>
+                Are you sure you want to long rest? Reorganize your prepared spells below.
               </p>
+              <div className="mb-5 w-full">{renderSpellbook()}</div>
               <div className="flex gap-3">
                 <button onClick={() => setLongRestStep(null)}
                   className="px-5 py-2 text-sm hover:opacity-80"
@@ -6208,6 +6375,22 @@ export default function App() {
               </button>
               <button onClick={startWizardSignatureSpell} className="px-4 py-2 text-sm font-semibold" style={{ background: "linear-gradient(135deg, #101a2b, #1b2e45)", border: "1px solid rgba(106,154,224,0.4)", borderRadius: 4, color: "#6a9ae0", fontFamily: "'Cinzel', serif", cursor: "pointer" }}>
                 Got It
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {fighterFeatPromptOpen && (
+        <div className="fixed inset-0 flex items-center justify-center z-60" style={{ background: "rgba(0,0,0,0.78)" }} onClick={() => { setFighterFeatPromptOpen(false); setFighterFeatAcknowledged(true); }}>
+          <div className="p-6 flex flex-col gap-4 w-full max-w-md" style={{ background: "#0e0c08", border: "1px solid rgba(196,133,58,0.4)", borderRadius: 8 }} onClick={(e) => e.stopPropagation()}>
+            <div className="text-base font-bold" style={{ fontFamily: "'Cinzel', serif", color: "#c4853a" }}>Feat Unlocked</div>
+            <div className="text-sm" style={{ color: "#9a8a6a", fontFamily: "'Crimson Pro', serif" }}>
+              You can learn a feat now. Consult with your DM to learn more.
+            </div>
+            <div className="flex justify-end gap-2">
+              <button onClick={() => { setFighterFeatPromptOpen(false); setFighterFeatAcknowledged(true); }} className="px-4 py-2 text-sm font-semibold" style={{ background: "linear-gradient(135deg, #1a1208, #241a0c)", border: "1px solid rgba(196,133,58,0.4)", borderRadius: 4, color: "#c4853a", fontFamily: "'Cinzel', serif", cursor: "pointer" }}>
+                OK
               </button>
             </div>
           </div>
