@@ -3563,13 +3563,13 @@ export default function App() {
               style={{ background: "linear-gradient(135deg, #1a1208, #241a0c)", border: "1px solid rgba(196,133,58,0.4)", borderRadius: 4, color: "#c4853a", fontFamily: "'Cinzel', serif", cursor: "pointer" }}>
               Save Character
             </button>
-            <button
+            {selectedClass === "Wizard" && <button
               onClick={() => setSpellbookOpen(true)}
               className="text-xs px-3 py-1.5 hover:opacity-90 transition-opacity"
               style={{ background: "#0e1218", border: "1px solid rgba(106,154,224,0.35)", borderRadius: 4, color: "#6a9ae0", fontFamily: "'Cinzel', serif", cursor: "pointer" }}
             >
               Spellbook
-            </button>
+            </button>}
             <button
               onClick={() => setLongRestStep("confirm")}
               className="text-xs px-3 py-1.5 hover:opacity-90 transition-opacity"
@@ -6147,7 +6147,7 @@ export default function App() {
         );
       })()}
 
-      {spellbookOpen && !longRestStep && (
+      {spellbookOpen && !longRestStep && selectedClass === "Wizard" && (
         <div className="fixed inset-0 flex items-center justify-center z-50" style={{ background: "rgba(0,0,0,0.8)" }} onClick={() => setSpellbookOpen(false)}>
           <div onClick={(e) => e.stopPropagation()} style={{ background: "#0e0c08", border: "1px solid rgba(106,154,224,0.4)", borderRadius: 8, padding: "24px 28px", width: "90%", maxWidth: 560, maxHeight: "85vh", overflowY: "auto" }}>
             <div className="flex items-center justify-between mb-3">
@@ -6168,9 +6168,9 @@ export default function App() {
               <div className="text-4xl mb-4">🌙</div>
               <h2 className="text-base font-bold mb-2" style={{ fontFamily: "'Cinzel', serif", color: "#e2cfa0" }}>Long Rest</h2>
               <p className="text-sm mb-4" style={{ color: "#9a8a6a", fontFamily: "'Crimson Pro', serif" }}>
-                Are you sure you want to long rest? Reorganize your prepared spells below.
+                Are you sure you want to long rest?{selectedClass === "Wizard" ? " Reorganize your prepared spells below." : ""}
               </p>
-              <div className="mb-5 w-full">{renderSpellbook()}</div>
+              {selectedClass === "Wizard" && <div className="mb-5 w-full">{renderSpellbook()}</div>}
               <div className="flex gap-3">
                 <button onClick={() => setLongRestStep(null)}
                   className="px-5 py-2 text-sm hover:opacity-80"
