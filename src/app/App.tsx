@@ -90,8 +90,10 @@ interface Spell extends Ability {
   slotCostMax?: number;
   scaleDamageBySlots?: boolean;
   isHealing?: boolean; // healing spell: rolled value restores HP instead of dealing damage
+  grantedBy?: string; // runtime-only: name of the equipped item granting this spell (free cast, never saved)
 }
 
+type AttachedSpell = Omit<Spell, "id" | "type" | "grantedBy">;
 interface SacrificeReward {
   name: string;
   amount?: number | string;
@@ -163,6 +165,7 @@ interface InventoryItem {
   maxCharges?: number;        // max resource charges (shown as dots, restored on long rest unless Persistent)
   currentCharges?: number;    // remaining charges
   sacrificeRewards?: SacrificeReward[];
+  attachedSpells?: AttachedSpell[]; // weapon only: spells usable (no spell slots) while equipped
   lookupKey?: string; // Content Lookup sheet Key this item was fetched with, if any
 }
 
@@ -690,6 +693,21 @@ const normalizeStatExpression = (value: unknown): string | undefined => {
   return mapped.join("+");
 };
 
+const normalizeAttachedSpells = (raw: unknown): AttachedSpell[] => {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((s): s is Record<string, any> => Boolean(s && typeof s === "object"))
+    .map((s) => ({
+      name: typeof s.name === "string" && s.name.trim() ? s.name : "Unnamed Spell",
+      description: typeof s.description === "string" ? s.description : "",
+      isSpell: true as const,
+      ...(s.damageDie !== undefined ? { damageDie: Number(s.damageDie) } : {}),
+      ...(canonicalStatKey(s.damageStat) ? { damageStat: canonicalStatKey(s.damageStat) as StatKey } : {}),
+      ...(s.formula !== undefined ? { formula: normalizeFormulaStatTokens(String(s.formula)) } : {}),
+      ...(s.isHealing !== undefined ? { isHealing: Boolean(s.isHealing) } : {}),
+    }));
+};
+
 const isSpellLikeEntry = (entry: any): boolean => Boolean(entry?.isSpell)
   || entry?.damageDie !== undefined
   || entry?.damageStat !== undefined
@@ -1036,6 +1054,7 @@ export default function App() {
       ...(item.weaponFormula ? { weaponFormula: normalizeFormulaStatTokens(item.weaponFormula) } : {}),
       ...(item.healStat ? { healStat: canonicalStatKey(item.healStat) ?? undefined } : {}),
       ...(item.statBonus ? { statBonus: normalizeStatsObject(item.statBonus) } : {}),
+      ...(item.attachedSpells ? { attachedSpells: normalizeAttachedSpells(item.attachedSpells) } : {}),
       ...(Array.isArray(item.attacks)
         ? {
             attacks: item.attacks.map((attack) => ({
@@ -1967,6 +1986,9 @@ export default function App() {
                     }
                   : {}),
                 ...(entry.description ? { description: entry.description } : {}),
+                ...(itemType === "weapon" && Array.isArray(entry.attachedSpells) && normalizeAttachedSpells(entry.attachedSpells).length > 0
+                  ? { attachedSpells: normalizeAttachedSpells(entry.attachedSpells) }
+                  : {}),
                 ...(sourceKey ? { lookupKey: sourceKey } : {}),
               } as InventoryItem;
         });
@@ -2758,6 +2780,7 @@ export default function App() {
       "- statBonus (object): { PHYS?, CON?, INT?, SOC? } numeric bonuses applied while equipped.",
       "- speedBonus (number), acBonus (number), magicResistBonus (number): derived-trait bonuses while equipped.",
       "- sacrificeRewards (array): [{ name, amount? (number|string), description? }].",
+      "- attachedSpells (array, type \"weapon\" only): [{ name, description?, damageDie?, damageStat?, formula?, isHealing? }]. While the weapon is EQUIPPED each entry appears as a spell card (tagged 'From <item>') for ANY class. They are free to cast: they bypass the prepared-spell limit and consume NO spell slots and NO weapon charges. They vanish on unequip, are never added to the spellbook, and are saved only as part of the item. slotCost/slotCostMax/scaleDamageBySlots are ignored (a scaling spell rolls its base dice once).",
       "- lookupKey (string): set automatically when fetched via Content Lookup; you may omit it.",
       "ATTACK / DAMAGE FIELDS (any item may carry weapon-style fields):",
       "- SINGLE-ATTACK MODE (no attacks array): die (number sides), stat (stat key/compound), damageBonus (number), weaponFormula (string, overrides die/stat), extraDice (number), extraDie (number sides), extraDamage (number).",
@@ -2836,6 +2859,7 @@ export default function App() {
             { name: "Arcane Strike", formula: "1d6 + PHYS + INT + 2", consumesCharge: true, description: "Charged slash." },
           ],
           sacrificeRewards: [{ name: "Gold", amount: 25, description: "Gain 25 gold when sacrificed." }],
+          attachedSpells: [{ name: "Arc Flash", description: "Lightning leaps from the blade.", formula: "1d6 + INT" }],
           description: "Slash is free; Arcane Strike costs a charge. Grants +2 PHYS and +2 AC while equipped.",
         },
         {
@@ -3078,14 +3102,20 @@ export default function App() {
       minCost,
       spell.slotCostMax ?? (spell.scaleDamageBySlots ? wizardSpellSlots : minCost),
     );
-    const selectedSlotCount = Math.max(minCost, Math.min(slotCount, Math.min(wizardSpellSlots, maxCost)));
+    const free = Boolean(spell.grantedBy);
+    const selectedSlotCount = free
+      ? minCost
+      : Math.max(minCost, Math.min(slotCount, Math.min(wizardSpellSlots, maxCost)));
+    const costText = free
+      ? `from ${spell.grantedBy}`
+      : `${selectedSlotCount} slot${selectedSlotCount > 1 ? "s" : ""}`;
 
-    if (selectedSlotCount > wizardSpellSlots) {
+    if (!free && selectedSlotCount > wizardSpellSlots) {
       addLog(`✨ ${spell.name} — not enough spell slots available.`, "info");
       return;
     }
 
-    setWizardSpellSlots((current) => Math.max(0, current - selectedSlotCount));
+    if (!free) setWizardSpellSlots((current) => Math.max(0, current - selectedSlotCount));
 
     // ─── Healing spells ────────────────────────────────────────────────────
     if (spell.isHealing) {
@@ -3139,7 +3169,7 @@ export default function App() {
           const heal = applyOmnivampHeal(outcome.total);
           return heal > 0 ? ` • omnivamp ${omnivamp}% heals ${heal} HP` : "";
         })();
-        addLog(`✨ ${spell.name} — ${selectedSlotCount} slot${selectedSlotCount > 1 ? "s" : ""}; ${outcome.detail} damage dealt${healSuffix}`, "info");
+        addLog(`✨ ${spell.name} — ${costText}; ${outcome.detail} damage dealt${healSuffix}`, "info");
         return;
       }
     }
@@ -3157,12 +3187,12 @@ export default function App() {
         return heal > 0 ? ` • omnivamp ${omnivamp}% heals ${heal} HP` : "";
       })();
       if (spell.damageStat) {
-        addLog(`✨ ${spell.name} — ${selectedSlotCount} slot${selectedSlotCount > 1 ? "s" : ""}; ${damageRolls}d${spell.damageDie}(${totalRoll}) + ${spell.damageStat}(${statBonus}) = ${damage} damage dealt${healSuffix}`, "info");
+        addLog(`✨ ${spell.name} — ${costText}; ${damageRolls}d${spell.damageDie}(${totalRoll}) + ${spell.damageStat}(${statBonus}) = ${damage} damage dealt${healSuffix}`, "info");
       } else {
-        addLog(`✨ ${spell.name} — ${selectedSlotCount} slot${selectedSlotCount > 1 ? "s" : ""}; ${damageRolls}d${spell.damageDie}(${totalRoll}) = ${damage} damage dealt${healSuffix}`, "info");
+        addLog(`✨ ${spell.name} — ${costText}; ${damageRolls}d${spell.damageDie}(${totalRoll}) = ${damage} damage dealt${healSuffix}`, "info");
       }
     } else {
-      addLog(`✨ Cast ${spell.name} using ${selectedSlotCount} slot${selectedSlotCount > 1 ? "s" : ""}`, "info");
+      addLog(`✨ Cast ${spell.name} (${costText})`, "info");
     }
   };
 
@@ -3173,6 +3203,12 @@ export default function App() {
     ).values(),
   );
   const physAC = equippedItems.reduce((sum, item) => sum + (item.acBonus ?? 0), 0);
+  // Negative IDs keep item-granted spells distinct from learned spells (positive IDs).
+  const itemSpells: Spell[] = equippedItems
+    .filter((item) => item.type === "weapon")
+    .flatMap((item) => (item.attachedSpells ?? []).map((s, idx): Spell => ({
+      ...s, id: -(item.id * 1000 + idx + 1), type: "Ability", grantedBy: item.name,
+    })));
   const magicResist = equippedItems.reduce((sum, item) => sum + (item.magicResistBonus ?? 0), 0) + abilityDerivedModifiers.mr;
   const ac = physAC + abilityDerivedModifiers.ac; // keep ac alias for attack applyDamage
   const baseSpeed = selectedClass === "Fighter" ? 3 : selectedClass === "Wizard" ? 2 : 0;
@@ -4485,11 +4521,12 @@ export default function App() {
               )}
             </div>
 
-            {selectedClass === "Wizard" && (
+            {(selectedClass === "Wizard" || itemSpells.length > 0) && (
               <div style={panelStyle}>
                 <div className="mb-3">
                   <span className="text-xs uppercase tracking-widest" style={{ color: "#9a8a6a", fontFamily: "'Cinzel', serif" }}>Spells & Cantrips</span>
                 </div>
+                {selectedClass === "Wizard" && (<>
                 <div style={{ background: "#111008", border: "1px solid rgba(106,154,224,0.2)", borderRadius: 5, padding: "10px 12px" }}>
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-sm font-bold" style={{ fontFamily: "'Cinzel', serif", color: "#e2cfa0" }}>Spell Slots</span>
@@ -4548,6 +4585,7 @@ export default function App() {
                     </p>
                   </div>
                 </div>
+                </>)}
                 <div className="mt-3" style={{ background: "#111008", border: "1px solid rgba(106,154,224,0.2)", borderRadius: 5, padding: "10px 12px" }}>
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-sm font-bold" style={{ fontFamily: "'Cinzel', serif", color: "#e2cfa0" }}>Spells</span>
@@ -4562,15 +4600,16 @@ export default function App() {
                     </div>
                   </div>
                   <div className="flex flex-col gap-2">
-                    {spells.length === 0 && (
+                    {spells.length === 0 && itemSpells.length === 0 && (
                       <p className="text-[10px] italic" style={{ color: "#3a3020", fontFamily: "'Crimson Pro', serif" }}>No spells yet.</p>
                     )}
-                    {spells.length > 0 && preparedIds.length === 0 && (
+                    {selectedClass === "Wizard" && spells.length > 0 && preparedIds.length === 0 && (
                       <p className="text-[10px] italic" style={{ color: "#3a3020", fontFamily: "'Crimson Pro', serif" }}>No spells prepared. Open the Spellbook and prepare spells during a Long Rest.</p>
                     )}
-                    {spells.filter((spell) => preparedIds.includes(spell.id) && !isCardHidden(`spell:${spell.id}`)).map((spell) => {
+                    {[...(selectedClass === "Wizard" ? spells.filter((spell) => preparedIds.includes(spell.id)) : []), ...itemSpells].filter((spell) => !isCardHidden(`spell:${spell.id}`)).map((spell) => {
+                      const granted = Boolean(spell.grantedBy);
                       const minSlotCost = Math.max(1, spell.slotCost ?? 1);
-                      const maxSelectableSlotCost = Math.max(
+                      const maxSelectableSlotCost = granted ? minSlotCost : Math.max(
                         minSlotCost,
                         Math.min(
                           wizardSpellSlots,
@@ -4605,20 +4644,20 @@ export default function App() {
                                 cost: getExecutableActionCost(spell.description),
                                 description: spell.description,
                                 formula: spellFormulaBadge,
-                                slotBadge: `Slots ${minSlotCost}${canChooseSlots ? `–${maxSelectableSlotCost}` : ""}`,
+                                slotBadge: granted ? `From ${spell.grantedBy}` : `Slots ${minSlotCost}${canChooseSlots ? `–${maxSelectableSlotCost}` : ""}`,
                                 onHide: () => hideCard(spellKey),
                               })} />
                             ) : null}
-                            <button onClick={() => setSpells((prev) => prev.filter((s) => s.id !== spell.id))}
+                            {!granted && <button onClick={() => setSpells((prev) => prev.filter((s) => s.id !== spell.id))}
                               style={{ background: "none", border: "none", cursor: "pointer", color: "#3a2020", padding: 0, lineHeight: 1, flexShrink: 0 }}>
                               <X size={10} />
-                            </button>
+                            </button>}
                           </div>
                         </div>
                         <div className="flex flex-wrap gap-1 mt-2">
                           <div className="flex items-center gap-1">
-                            <span className="text-[9px]" style={{ color: "#6a9ae0", fontFamily: "'Cinzel', serif" }}>Slots</span>
-                            {canChooseSlots ? (
+                            <span className="text-[9px]" style={{ color: "#6a9ae0", fontFamily: "'Cinzel', serif" }}>{granted ? `From ${spell.grantedBy}` : "Slots"}</span>
+                            {granted ? null : canChooseSlots ? (
                               <select
                                 value={selectedSpellSlot}
                                 onChange={(e) => setSpellSlotSelections((prev) => ({ ...prev, [spell.id]: Number(e.target.value) }))}
