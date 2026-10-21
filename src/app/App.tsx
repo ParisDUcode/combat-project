@@ -90,7 +90,7 @@ interface Spell extends Ability {
   slotCostMax?: number;
   scaleDamageBySlots?: boolean;
   isHealing?: boolean; // healing spell: rolled value restores HP instead of dealing damage
-  grantedBy?: string; // runtime-only: name of the equipped item granting this spell (free cast, never saved)
+  grantedBy?: string; // runtime-only: name of the equipped item granting this spell (never saved)
 }
 
 type AttachedSpell = Omit<Spell, "id" | "type" | "grantedBy">;
@@ -165,7 +165,7 @@ interface InventoryItem {
   maxCharges?: number;        // max resource charges (shown as dots, restored on long rest unless Persistent)
   currentCharges?: number;    // remaining charges
   sacrificeRewards?: SacrificeReward[];
-  attachedSpells?: AttachedSpell[]; // weapon only: spells usable (no spell slots) while equipped
+  attachedSpells?: AttachedSpell[]; // weapon only: spells castable with spell slots while equipped
   lookupKey?: string; // Content Lookup sheet Key this item was fetched with, if any
 }
 
@@ -705,6 +705,9 @@ const normalizeAttachedSpells = (raw: unknown): AttachedSpell[] => {
       ...(canonicalStatKey(s.damageStat) ? { damageStat: canonicalStatKey(s.damageStat) as StatKey } : {}),
       ...(s.formula !== undefined ? { formula: normalizeFormulaStatTokens(String(s.formula)) } : {}),
       ...(s.isHealing !== undefined ? { isHealing: Boolean(s.isHealing) } : {}),
+      ...(s.slotCost !== undefined ? { slotCost: Math.max(1, Number(s.slotCost) || 1) } : {}),
+      ...(s.slotCostMax !== undefined ? { slotCostMax: Math.max(1, Number(s.slotCostMax) || 1) } : {}),
+      ...(s.scaleDamageBySlots !== undefined ? { scaleDamageBySlots: Boolean(s.scaleDamageBySlots) } : {}),
     }));
 };
 
@@ -2780,7 +2783,7 @@ export default function App() {
       "- statBonus (object): { PHYS?, CON?, INT?, SOC? } numeric bonuses applied while equipped.",
       "- speedBonus (number), acBonus (number), magicResistBonus (number): derived-trait bonuses while equipped.",
       "- sacrificeRewards (array): [{ name, amount? (number|string), description? }].",
-      "- attachedSpells (array, type \"weapon\" only): [{ name, description?, damageDie?, damageStat?, formula?, isHealing? }]. While the weapon is EQUIPPED each entry appears as a spell card (tagged 'From <item>') for ANY class. They are free to cast: they bypass the prepared-spell limit and consume NO spell slots and NO weapon charges. They vanish on unequip, are never added to the spellbook, and are saved only as part of the item. slotCost/slotCostMax/scaleDamageBySlots are ignored (a scaling spell rolls its base dice once).",
+      "- attachedSpells (array, type \"weapon\" only): [{ name, description?, damageDie?, damageStat?, formula?, isHealing?, slotCost?, slotCostMax?, scaleDamageBySlots? }]. While the weapon is EQUIPPED each entry appears as a spell card (tagged with the item name) for ANY class. They cast like normal spells: they bypass the prepared-spell limit but DO consume the caster's spell slots (slotCost, default 1; slotCostMax gives a variable slot choice; scaleDamageBySlots repeats the roll per slot spent). Classes without spell slots (e.g. Fighter) cannot cast them (cast button disabled). They NEVER consume the host item's maxCharges/currentCharges. They vanish on unequip, are never added to the spellbook, and are saved only as part of the item. Fields: name, description?, damageDie?, damageStat?, formula?, isHealing?, slotCost?, slotCostMax?, scaleDamageBySlots?.",
       "- lookupKey (string): set automatically when fetched via Content Lookup; you may omit it.",
       "ATTACK / DAMAGE FIELDS (any item may carry weapon-style fields):",
       "- SINGLE-ATTACK MODE (no attacks array): die (number sides), stat (stat key/compound), damageBonus (number), weaponFormula (string, overrides die/stat), extraDice (number), extraDie (number sides), extraDamage (number).",
@@ -2859,7 +2862,7 @@ export default function App() {
             { name: "Arcane Strike", formula: "1d6 + PHYS + INT + 2", consumesCharge: true, description: "Charged slash." },
           ],
           sacrificeRewards: [{ name: "Gold", amount: 25, description: "Gain 25 gold when sacrificed." }],
-          attachedSpells: [{ name: "Arc Flash", description: "Lightning leaps from the blade.", formula: "1d6 + INT" }],
+          attachedSpells: [{ name: "Arc Flash", description: "Lightning leaps from the blade.", damageDie: 6, damageStat: "INT", slotCost: 1, slotCostMax: 3, scaleDamageBySlots: true }],
           description: "Slash is free; Arcane Strike costs a charge. Grants +2 PHYS and +2 AC while equipped.",
         },
         {
@@ -3097,25 +3100,21 @@ export default function App() {
 
 
   const castSpell = (spell: Spell, slotCount: number) => {
+    const slotPool = selectedClass === "Wizard" ? wizardSpellSlots : 0;
     const minCost = Math.max(1, spell.slotCost ?? 1);
     const maxCost = Math.max(
       minCost,
-      spell.slotCostMax ?? (spell.scaleDamageBySlots ? wizardSpellSlots : minCost),
+      spell.slotCostMax ?? (spell.scaleDamageBySlots ? slotPool : minCost),
     );
-    const free = Boolean(spell.grantedBy);
-    const selectedSlotCount = free
-      ? minCost
-      : Math.max(minCost, Math.min(slotCount, Math.min(wizardSpellSlots, maxCost)));
-    const costText = free
-      ? `from ${spell.grantedBy}`
-      : `${selectedSlotCount} slot${selectedSlotCount > 1 ? "s" : ""}`;
+    const selectedSlotCount = Math.max(minCost, Math.min(slotCount, maxCost));
+    const costText = `${selectedSlotCount} slot${selectedSlotCount > 1 ? "s" : ""}${spell.grantedBy ? ` (${spell.grantedBy})` : ""}`;
 
-    if (!free && selectedSlotCount > wizardSpellSlots) {
+    if (selectedSlotCount > slotPool) {
       addLog(`✨ ${spell.name} — not enough spell slots available.`, "info");
       return;
     }
 
-    if (!free) setWizardSpellSlots((current) => Math.max(0, current - selectedSlotCount));
+    setWizardSpellSlots((current) => Math.max(0, current - selectedSlotCount));
 
     // ─── Healing spells ────────────────────────────────────────────────────
     if (spell.isHealing) {
@@ -3192,7 +3191,7 @@ export default function App() {
         addLog(`✨ ${spell.name} — ${costText}; ${damageRolls}d${spell.damageDie}(${totalRoll}) = ${damage} damage dealt${healSuffix}`, "info");
       }
     } else {
-      addLog(`✨ Cast ${spell.name} (${costText})`, "info");
+      addLog(`✨ Cast ${spell.name} using ${costText}`, "info");
     }
   };
 
@@ -4608,12 +4607,13 @@ export default function App() {
                     )}
                     {[...(selectedClass === "Wizard" ? spells.filter((spell) => preparedIds.includes(spell.id)) : []), ...itemSpells].filter((spell) => !isCardHidden(`spell:${spell.id}`)).map((spell) => {
                       const granted = Boolean(spell.grantedBy);
+                      const slotPool = selectedClass === "Wizard" ? wizardSpellSlots : 0;
                       const minSlotCost = Math.max(1, spell.slotCost ?? 1);
-                      const maxSelectableSlotCost = granted ? minSlotCost : Math.max(
+                      const maxSelectableSlotCost = Math.max(
                         minSlotCost,
                         Math.min(
-                          wizardSpellSlots,
-                          spell.slotCostMax ?? (spell.scaleDamageBySlots ? wizardSpellSlots : minSlotCost),
+                          slotPool,
+                          spell.slotCostMax ?? (spell.scaleDamageBySlots ? slotPool : minSlotCost),
                         ),
                       );
                       const selectedSpellSlot = Math.max(
@@ -4644,7 +4644,7 @@ export default function App() {
                                 cost: getExecutableActionCost(spell.description),
                                 description: spell.description,
                                 formula: spellFormulaBadge,
-                                slotBadge: granted ? `From ${spell.grantedBy}` : `Slots ${minSlotCost}${canChooseSlots ? `–${maxSelectableSlotCost}` : ""}`,
+                                slotBadge: `${granted ? `${spell.grantedBy} • ` : ""}Slots ${minSlotCost}${canChooseSlots ? `–${maxSelectableSlotCost}` : ""}`,
                                 onHide: () => hideCard(spellKey),
                               })} />
                             ) : null}
@@ -4656,8 +4656,9 @@ export default function App() {
                         </div>
                         <div className="flex flex-wrap gap-1 mt-2">
                           <div className="flex items-center gap-1">
-                            <span className="text-[9px]" style={{ color: "#6a9ae0", fontFamily: "'Cinzel', serif" }}>{granted ? `From ${spell.grantedBy}` : "Slots"}</span>
-                            {granted ? null : canChooseSlots ? (
+                            <span className="text-[9px]" style={{ color: "#6a9ae0", fontFamily: "'Cinzel', serif" }}>Slots</span>
+                            {granted && <span className="text-[9px]" style={{ color: "#9a8a6a", fontFamily: "'Cinzel', serif" }}>({spell.grantedBy})</span>}
+                            {canChooseSlots ? (
                               <select
                                 value={selectedSpellSlot}
                                 onChange={(e) => setSpellSlotSelections((prev) => ({ ...prev, [spell.id]: Number(e.target.value) }))}
@@ -4693,8 +4694,9 @@ export default function App() {
                           )}
                           <button
                             onClick={() => castSpell(spell, selectedSpellSlot)}
+                            disabled={minSlotCost > slotPool}
                             className="text-[10px] px-2 py-0.5 rounded transition-all hover:opacity-90 active:scale-95 font-semibold"
-                            style={{ background: "rgba(106,154,224,0.2)", border: "1px solid rgba(106,154,224,0.4)", color: "#6a9ae0", fontFamily: "'Cinzel', serif", cursor: "pointer" }}
+                            style={{ background: "rgba(106,154,224,0.2)", border: "1px solid rgba(106,154,224,0.4)", color: "#6a9ae0", fontFamily: "'Cinzel', serif", cursor: minSlotCost > slotPool ? "not-allowed" : "pointer", opacity: minSlotCost > slotPool ? 0.4 : 1 }}
                           >
                             {spell.formula
                               ? `Cast (${spell.formula})`
