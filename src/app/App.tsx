@@ -18,6 +18,22 @@ import { normalizeMonsterCollection } from "./monsters/types";
 import { collectAbilityDerivedModifierTotals, resolveAbilityModifierTarget } from "./abilityModifierTargets";
 import { fetchItemLookupMap } from "./services/itemLookupService";
 import { fetchMonsterLookup } from "./services/monsterLookupService";
+import { EntityTracker } from "./components/EntityTracker";
+import type { EntityDamageType, EquippedCompanionOption, SpawnResult } from "./components/EntityTracker";
+import {
+  MAX_ACTIVE_ENTITIES,
+  applyLongRestToEntities,
+  buildCustomEntity,
+  buildMonsterEntity,
+  clampHp,
+  clearCustomEntities,
+  dismissEntity,
+  findMonsterByQuery,
+  keepEquippedCompanions,
+  normalizeCompanions,
+  normalizeEntities,
+} from "./entities";
+import type { CompanionRecords, CustomEntityInput, EntityInstance } from "./entities";
 
 type StatKey = "PHYS" | "CON" | "INT" | "SOC";
 type ClassName = "Fighter" | "Wizard";
@@ -167,6 +183,7 @@ interface InventoryItem {
   sacrificeRewards?: SacrificeReward[];
   attachedSpells?: AttachedSpell[]; // weapon only: spells castable with spell slots while equipped
   lookupKey?: string; // Content Lookup sheet Key this item was fetched with, if any
+  companionId?: string; // monster id of the companion this weapon/accessory grants while equipped
 }
 
 const BASE_CHEST: InventoryItem = {
@@ -937,6 +954,10 @@ export default function App() {
   const [monsterSheetLoaded, setMonsterSheetLoaded] = useState(false);
   const [monsterSheetLoading, setMonsterSheetLoading] = useState(false);
   const [monsterSheetError, setMonsterSheetError] = useState("");
+  const [monsterKeyMap, setMonsterKeyMap] = useState<Map<string, MonsterDefinition>>(new Map());
+  // ─── Field entities & companions ─────────────────────────────────────────
+  const [companions, setCompanions] = useState<CompanionRecords>({});
+  const [activeEntities, setActiveEntities] = useState<EntityInstance[]>([]);
   const [itemForm, setItemForm] = useState<{
     name: string; type: ItemType; slot: EquipSlot | ""; die: number; stat: StatKey; damageBonus: number; acBonus: number; description: string;
   }>({ name: "", type: "weapon", slot: "", die: 8, stat: "PHYS", damageBonus: 0, acBonus: 0, description: "" });
@@ -1039,6 +1060,8 @@ export default function App() {
       combatPlayers,
       round,
       turnIndex,
+      companions,
+      activeEntities,
     };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
@@ -1267,6 +1290,9 @@ export default function App() {
     if (d.combatPlayers !== undefined) setCombatPlayers(d.combatPlayers);
     if (d.round !== undefined) setRound(d.round);
     if (d.turnIndex !== undefined) setTurnIndex(d.turnIndex);
+    // Older saves have neither field; reset so a previous character's entities never leak in.
+    setCompanions(normalizeCompanions(d.companions));
+    setActiveEntities(normalizeEntities(d.activeEntities));
   };
 
   const loadCharacterFromText = () => {
@@ -1993,6 +2019,7 @@ export default function App() {
                   ? { attachedSpells: normalizeAttachedSpells(entry.attachedSpells) }
                   : {}),
                 ...(sourceKey ? { lookupKey: sourceKey } : {}),
+                ...(typeof entry.companionId === "string" && entry.companionId.trim() ? { companionId: entry.companionId.trim() } : {}),
               } as InventoryItem;
         });
 
@@ -2082,6 +2109,7 @@ export default function App() {
     try {
       const result = await fetchMonsterLookup();
       setMonsterRegistry(result.list);
+      setMonsterKeyMap(new Map(Array.from(result.byKey, ([key, def]) => [key.toLowerCase().replace(/[^a-z0-9]/g, ""), def])));
       setMonsterSheetLoaded(true);
       if (result.errors.length > 0) {
         setMonsterSheetError(`Skipped ${result.errors.length} invalid row(s): ${result.errors[0]}`);
@@ -2099,6 +2127,129 @@ export default function App() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fightMenuOpen]);
+
+  // ─── Field entities & companions ─────────────────────────────────────────
+  const resolveMonster = (query: string) => findMonsterByQuery(monsterRegistry, query, monsterKeyMap);
+
+  const equippedCompanionItems = (() => {
+    const found = new Map<string, string>();
+    (["weapon1", "weapon2", "accessory1", "accessory2", "accessory3", "accessory4"] as EquipSlot[]).forEach((slot) => {
+      const item = equipment[slot];
+      if (item?.companionId && !found.has(item.companionId)) found.set(item.companionId, item.name);
+    });
+    return Array.from(found, ([companionId, itemName]) => ({ companionId, itemName }));
+  })();
+
+  // Permanent companions always read HP from the root companion record.
+  const entitiesView: EntityInstance[] = activeEntities.map((entity) => (
+    entity.isPermanent && entity.companionId && companions[entity.companionId]
+      ? { ...entity, currentHp: clampHp(companions[entity.companionId].currentHp, entity.maxHp) }
+      : entity
+  ));
+
+  const equippedCompanionOptions: EquippedCompanionOption[] = equippedCompanionItems.map(({ companionId, itemName }) => {
+    const def = resolveMonster(companionId);
+    const saved = companions[companionId]?.currentHp;
+    return {
+      companionId,
+      name: def?.name ?? itemName,
+      currentHp: def ? clampHp(saved ?? def.hp, def.hp) : null,
+      maxHp: def ? def.hp : null,
+      resolved: Boolean(def),
+      active: activeEntities.some((entity) => entity.companionId === companionId),
+    };
+  });
+
+  const entitySlotsFull = () => activeEntities.length >= MAX_ACTIVE_ENTITIES;
+  const maxEntitiesError: SpawnResult = { ok: false, error: `Max ${MAX_ACTIVE_ENTITIES} entities can be active at once.` };
+
+  const spawnCompanionEntity = (companionId: string): SpawnResult => {
+    if (entitySlotsFull()) return maxEntitiesError;
+    if (activeEntities.some((entity) => entity.companionId === companionId)) return { ok: false };
+    const def = resolveMonster(companionId);
+    if (!def) return { ok: false, error: "Monster ID not found in synced bestiary" };
+    const entity = buildMonsterEntity(def, activeEntities, { companionId, currentHp: companions[companionId]?.currentHp });
+    setCompanions((prev) => (prev[companionId] ? prev : { ...prev, [companionId]: { currentHp: def.hp } }));
+    setActiveEntities((prev) => [...prev, entity]);
+    return { ok: true };
+  };
+
+  const spawnEntityById = (query: string): SpawnResult => {
+    const def = monsterSheetLoaded ? resolveMonster(query) : undefined;
+    if (!def) return { ok: false, error: "Monster ID not found in synced bestiary" };
+    if (entitySlotsFull()) return maxEntitiesError;
+    setActiveEntities((prev) => [...prev, buildMonsterEntity(def, prev)]);
+    return { ok: true };
+  };
+
+  const spawnCustomEntity = (input: CustomEntityInput): SpawnResult => {
+    if (entitySlotsFull()) return maxEntitiesError;
+    setActiveEntities((prev) => [...prev, buildCustomEntity(input, prev, Date.now())]);
+    return { ok: true };
+  };
+
+  const setEntityHp = (entity: EntityInstance, hp: number) => {
+    const next = clampHp(hp, entity.maxHp);
+    if (entity.isPermanent && entity.companionId) {
+      const companionId = entity.companionId;
+      setCompanions((prev) => ({ ...prev, [companionId]: { currentHp: next } }));
+    } else {
+      setActiveEntities((prev) => prev.map((e) => (e.uid === entity.uid ? { ...e, currentHp: next } : e)));
+    }
+  };
+
+  const damageEntity = (uid: string, raw: number, type: EntityDamageType) => {
+    const entity = entitiesView.find((e) => e.uid === uid);
+    if (!entity) return;
+    const defense = type === "physical" ? entity.armor : type === "magic" ? entity.magicResist : 0;
+    const mitigation = type === "true" ? 0 : computeMitigation(defense);
+    const net = type === "true" ? Math.max(0, Math.floor(raw)) : applyMitigation(raw, defense);
+    const nextHp = Math.max(0, entity.currentHp - net);
+    setEntityHp(entity, nextHp);
+    const typeLabel = type === "physical" ? "Physical" : type === "magic" ? "Magic" : "True";
+    const reduction = mitigation > 0 ? ` − ${mitigation} ${type === "physical" ? "Armor" : "MR"} = ${net}` : "";
+    const down = nextHp <= 0 && entity.currentHp > 0 ? ` ${entity.isPermanent ? "Fainted" : "Destroyed"}!` : "";
+    addLog(`👾 ${entity.name}: ${net} ${typeLabel} damage taken (${raw}${reduction}) — ${nextHp}/${entity.maxHp} HP.${down}`, "hit");
+  };
+
+  const healEntity = (uid: string, amount: number) => {
+    const entity = entitiesView.find((e) => e.uid === uid);
+    if (!entity) return;
+    const nextHp = clampHp(entity.currentHp + Math.max(0, Math.floor(amount)), entity.maxHp);
+    setEntityHp(entity, nextHp);
+    addLog(`👾 ${entity.name}: healed ${nextHp - entity.currentHp} HP (${nextHp}/${entity.maxHp}).`, "heal");
+  };
+
+  const rollEntityAttack = (uid: string, attack: RollableAttack) => {
+    const entity = entitiesView.find((e) => e.uid === uid);
+    if (!entity || entity.currentHp <= 0 || !entity.def) return;
+    const def = { ...entity.def, name: entity.name };
+    const resolved = resolveMonsterAttack(def, buildMonsterRuntime(def), attack);
+    addLog(`👾 ${resolved.logLine} — ${attack.name}`, "hit");
+    resolved.effectLines.forEach((line) => addLog(`👾 ${line}`, "info"));
+    if (resolved.selfHealing > 0) setEntityHp(entity, entity.currentHp + resolved.selfHealing);
+  };
+
+  const dismissEntityCard = (uid: string) => setActiveEntities((prev) => dismissEntity(prev, uid));
+
+  // Unequipping a companion item removes its card; the saved HP record stays.
+  useEffect(() => {
+    const equippedIds = new Set(equippedCompanionItems.map((c) => c.companionId));
+    setActiveEntities((prev) => {
+      const next = keepEquippedCompanions(prev, equippedIds);
+      return next.length === prev.length ? prev : next;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [equipment]);
+
+  // Companion HP resets need monster definitions, so sync the bestiary whenever entity state exists.
+  const hasEntityState = activeEntities.length > 0 || Object.keys(companions).length > 0;
+  useEffect(() => {
+    if (hasEntityState && !monsterSheetLoaded && !monsterSheetLoading) {
+      void refreshMonsterRegistry();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasEntityState]);
 
   const isWeaponSlot = (slot: EquipSlot) =>
     slot === "weapon1"
@@ -2714,6 +2865,13 @@ export default function App() {
         ? { ...ability, tally: { ...ability.tally, used: 0 } }
         : ability
     )));
+    const rested = applyLongRestToEntities(
+      activeEntities,
+      companions,
+      (id) => resolveMonster(id)?.hp ?? activeEntities.find((e) => e.companionId === id)?.maxHp,
+    );
+    setCompanions(rested.companions);
+    setActiveEntities(rested.entities);
     setLongRestStep(null);
   };
 
@@ -2785,6 +2943,7 @@ export default function App() {
       "- sacrificeRewards (array): [{ name, amount? (number|string), description? }].",
       "- attachedSpells (array, type \"weapon\" only): [{ name, description?, damageDie?, damageStat?, formula?, isHealing?, slotCost?, slotCostMax?, scaleDamageBySlots? }]. While the weapon is EQUIPPED each entry appears as a spell card (tagged with the item name) for ANY class. They cast like normal spells: they bypass the prepared-spell limit but DO consume the caster's spell slots (slotCost, default 1; slotCostMax gives a variable slot choice; scaleDamageBySlots repeats the roll per slot spent). Classes without spell slots (e.g. Fighter) cannot cast them (cast button disabled). They NEVER consume the host item's maxCharges/currentCharges. They vanish on unequip, are never added to the spellbook, and are saved only as part of the item. Fields: name, description?, damageDie?, damageStat?, formula?, isHealing?, slotCost?, slotCostMax?, scaleDamageBySlots?.",
       "- lookupKey (string): set automatically when fetched via Content Lookup; you may omit it.",
+      "- companionId (string, optional): monster id of a companion this weapon/accessory summons while equipped.",
       "ATTACK / DAMAGE FIELDS (any item may carry weapon-style fields):",
       "- SINGLE-ATTACK MODE (no attacks array): die (number sides), stat (stat key/compound), damageBonus (number), weaponFormula (string, overrides die/stat), extraDice (number), extraDie (number sides), extraDamage (number).",
       "- HEALING RIDER (single-attack mode): heal (flat number), healDie (number), healStat (PHYS|CON|INT|SOC). Items with a heal profile BYPASS omnivamp on their rolls.",
@@ -3832,6 +3991,22 @@ export default function App() {
                   />
                 </div>
               </div>
+
+              <EntityTracker
+                entities={entitiesView}
+                equippedCompanions={equippedCompanionOptions}
+                bestiaryIds={monsterRegistry.map((m) => m.id)}
+                bestiaryLoading={monsterSheetLoading}
+                onOpenSummon={() => { if (!monsterSheetLoaded && !monsterSheetLoading) void refreshMonsterRegistry(); }}
+                onSpawnCompanion={spawnCompanionEntity}
+                onSpawnById={spawnEntityById}
+                onSpawnCustom={spawnCustomEntity}
+                onDismiss={dismissEntityCard}
+                onClearCustom={() => setActiveEntities((prev) => clearCustomEntities(prev))}
+                onDamage={damageEntity}
+                onHeal={healEntity}
+                onAttack={rollEntityAttack}
+              />
             </div>
           </div>
 
