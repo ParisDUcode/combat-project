@@ -80,23 +80,25 @@ const EntityCard = ({
   return (
     <div style={{ background: "#0e0c08", border: `1px solid ${down ? "rgba(196,58,58,0.5)" : "rgba(196,133,58,0.25)"}`, borderRadius: 6, padding: 8 }}>
       <div className="flex items-center gap-1.5">
-        <span className="flex-1 truncate text-xs font-semibold uppercase" title={entity.name} style={{ color: down ? "#9a6a6a" : "#e2cfa0", fontFamily: FONT_HEAD }}>
+        <span className="min-w-0 truncate text-xs font-semibold uppercase" title={entity.name} style={{ color: down ? "#9a6a6a" : "#e2cfa0", fontFamily: FONT_HEAD }}>
           {entity.name}
         </span>
-        {entity.speed && (
-          <span className="text-[10px] px-1.5 py-0.5" title="Speed" style={{ border: "1px solid rgba(196,133,58,0.3)", borderRadius: 3, color: "#9a8a6a", fontFamily: FONT_MONO }}>
-            SPD {entity.speed}
-          </span>
-        )}
         <button
           type="button"
           onClick={(e) => { e.stopPropagation(); setInfoOpen(true); }}
-          title="Creature info"
-          aria-label={`Info for ${entity.name}`}
-          style={{ background: "none", border: "none", color: "#c4853a", cursor: "pointer", fontSize: 12 }}
+          title="Creature information"
+          aria-label={`Information for ${entity.name}`}
+          className="shrink-0 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider hover:opacity-90"
+          style={{ background: "rgba(224,58,58,0.18)", border: "1px solid #e03a3a", borderRadius: 3, color: "#ff5a5a", fontFamily: FONT_HEAD, cursor: "pointer" }}
         >
-          ℹ
+          Information
         </button>
+        <span className="flex-1" />
+        {entity.speed && (
+          <span className="shrink-0 text-[10px] px-1.5 py-0.5" title="Speed" style={{ border: "1px solid rgba(196,133,58,0.3)", borderRadius: 3, color: "#9a8a6a", fontFamily: FONT_MONO }}>
+            SPD {entity.speed}
+          </span>
+        )}
         <button
           type="button"
           onClick={() => onDismiss(entity.uid)}
