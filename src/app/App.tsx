@@ -19,6 +19,9 @@ import { collectAbilityDerivedModifierTotals, resolveAbilityModifierTarget } fro
 import { fetchItemLookupMap } from "./services/itemLookupService";
 import { fetchMonsterLookup } from "./services/monsterLookupService";
 import { EntityTracker } from "./components/EntityTracker";
+import { AddEntityModal } from "./components/AddEntityModal";
+import type { AddEntityConfig } from "./components/AddEntityModal";
+import { buildTurnOrder, turnIndexAfterInsert, uniqueDisplayName } from "./combatOrder";
 import type { EntityDamageType, EquippedCompanionOption, SpawnResult } from "./components/EntityTracker";
 import {
   MAX_ACTIVE_ENTITIES,
@@ -575,6 +578,9 @@ interface CombatPlayer {
   currentHp: number;
   maxHp: number;
   initiative: number;
+  ac?: number;
+  mr?: number;
+  speed?: number;
 }
 
 interface FightMonsterEntry {
@@ -940,6 +946,7 @@ export default function App() {
   ]);
   const [round, setRound] = useState(1);
   const [turnIndex, setTurnIndex] = useState(0);
+  const [addEntityOpen, setAddEntityOpen] = useState(false);
   const [combatLog, setCombatLog] = useState<string[]>([]);
   const combatAttackDrag = useRef<{ monsterId: string; attack: MonsterAttack } | null>(null);
   const [loadItemOpen, setLoadItemOpen] = useState(false);
@@ -2678,6 +2685,54 @@ export default function App() {
   const fightCombatantsWithNames = withDuplicateFightNames(fightCombatants);
 
   const logCombat = (msg: string) => setCombatLog((p) => [msg, ...p].slice(0, 60));
+
+  // Inserts a combatant mid-fight; the turn pointer follows the currently acting combatant.
+  const addEntityToCombat = (config: AddEntityConfig) => {
+    const oldOrder = buildTurnOrder(combatMonsters, combatPlayers);
+    let nextMonsters = combatMonsters;
+    let nextPlayers = combatPlayers;
+    let joinedName: string;
+
+    if (config.kind === "monster") {
+      const { def } = config;
+      joinedName = uniqueDisplayName(def.name, [...combatMonsters.map((m) => m.displayName), ...combatPlayers.map((p) => p.name)]);
+      const monster: CombatMonster = {
+        uid: `${def.id}-${Math.random().toString(36).slice(2)}`,
+        def,
+        displayName: joinedName,
+        side: config.side,
+        currentHp: def.hp,
+        initiative: config.initiative,
+        runtime: buildMonsterRuntime(def),
+      };
+      nextMonsters = [...combatMonsters, monster];
+    } else {
+      joinedName = config.name;
+      const player: CombatPlayer = {
+        uid: `cp${Date.now()}${Math.random().toString(36).slice(2, 6)}`,
+        name: config.name,
+        currentHp: config.currentHp,
+        maxHp: config.maxHp,
+        initiative: config.initiative,
+        ac: config.ac,
+        mr: config.mr,
+        speed: config.speed,
+      };
+      nextPlayers = [...combatPlayers, player];
+    }
+
+    const newOrder = buildTurnOrder(nextMonsters, nextPlayers);
+    setCombatMonsters(nextMonsters);
+    setCombatPlayers(nextPlayers);
+    setTurnIndex(turnIndexAfterInsert(oldOrder, turnIndex, newOrder));
+    logCombat(`${joinedName} joined the encounter (Initiative: ${config.initiative})`);
+    setAddEntityOpen(false);
+  };
+
+  const openAddEntity = () => {
+    setAddEntityOpen(true);
+    if (!monsterSheetLoaded && !monsterSheetLoading) void refreshMonsterRegistry();
+  };
 
   // DM generic dice roller — mirrors rollCustomDie (same rollD engine + multiplier), logs to the combat log.
   const rollDmDie = (sides: number) => {
@@ -5961,11 +6016,28 @@ export default function App() {
                   />
                 </div>
               </div>
+              <div className="flex items-center gap-2">
+              <button onClick={openAddEntity} className="px-3 py-1 text-xs hover:opacity-80"
+                style={{ background: "rgba(196,133,58,0.12)", border: "1px solid rgba(196,133,58,0.35)", borderRadius: 4, color: "#c4853a", fontFamily: "'Cinzel', serif", cursor: "pointer" }}>
+                + Add Entity
+              </button>
               <button onClick={() => setCombatActive(false)} className="px-3 py-1 text-xs hover:opacity-80"
                 style={{ background: "rgba(139,28,28,0.2)", border: "1px solid rgba(139,28,28,0.4)", borderRadius: 4, color: "#f5c5c5", fontFamily: "'Cinzel', serif", cursor: "pointer" }}>
                 End Combat
               </button>
+              </div>
             </div>
+
+            {addEntityOpen && (
+              <AddEntityModal
+                monsters={monsterRegistry}
+                loading={monsterSheetLoading}
+                loadError={monsterSheetError}
+                rollD20={() => rollD(20)}
+                onSubmit={addEntityToCombat}
+                onClose={() => setAddEntityOpen(false)}
+              />
+            )}
 
             {/* Initiative strip */}
             <div className="flex items-center gap-1 px-4 py-2 overflow-x-auto shrink-0" style={{ background: "#0c0a08", borderBottom: "1px solid rgba(196,133,58,0.1)", scrollbarWidth: "none" }}>
@@ -6029,6 +6101,11 @@ export default function App() {
                       >
                         <div className="text-xs font-bold" style={{ fontFamily: "'Cinzel', serif", color: "#6a9ae0" }}>{cp.name}</div>
                         <div className="text-xs" style={{ color: "#9a8a6a", fontFamily: "'Cinzel', serif" }}>Init {cp.initiative}</div>
+                        {(cp.ac !== undefined || cp.mr !== undefined || cp.speed !== undefined) && (
+                          <div className="text-[10px]" style={{ color: "#9a8a6a", fontFamily: "'JetBrains Mono', monospace" }}>
+                            AC {cp.ac ?? 0} · MR {cp.mr ?? 0} · SPD {cp.speed ?? 0}
+                          </div>
+                        )}
                         <div className="flex items-center gap-1 mt-1">
                           <input type="number" value={cp.currentHp || ""} placeholder="HP"
                             onChange={(e) => setCombatPlayers((p) => p.map((x) => x.uid === cp.uid ? { ...x, currentHp: Number(e.target.value) || 0 } : x))}
