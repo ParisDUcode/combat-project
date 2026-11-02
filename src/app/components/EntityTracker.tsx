@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import type { ReactNode } from "react";
 import type { RollableAttack } from "../monsters/types";
 import { MAX_ACTIVE_ENTITIES } from "../entities";
 import type { CustomEntityInput, EntityInstance } from "../entities";
@@ -64,6 +65,7 @@ const EntityCard = ({
 }) => {
   const [amount, setAmount] = useState("");
   const [type, setType] = useState<EntityDamageType>("physical");
+  const [infoOpen, setInfoOpen] = useState(false);
   const down = entity.currentHp <= 0;
   const pct = entity.maxHp > 0 ? Math.round((entity.currentHp / entity.maxHp) * 100) : 0;
   const barColor = pct > 50 ? "#4a9a5a" : pct > 25 ? "#c4a03a" : "#c43a3a";
@@ -78,8 +80,7 @@ const EntityCard = ({
   return (
     <div style={{ background: "#0e0c08", border: `1px solid ${down ? "rgba(196,58,58,0.5)" : "rgba(196,133,58,0.25)"}`, borderRadius: 6, padding: 8 }}>
       <div className="flex items-center gap-1.5">
-        <span aria-hidden>👾</span>
-        <span className="flex-1 truncate text-xs font-semibold" title={entity.name} style={{ color: down ? "#9a6a6a" : "#e2cfa0", fontFamily: FONT_HEAD }}>
+        <span className="flex-1 truncate text-xs font-semibold uppercase" title={entity.name} style={{ color: down ? "#9a6a6a" : "#e2cfa0", fontFamily: FONT_HEAD }}>
           {entity.name}
         </span>
         {entity.speed && (
@@ -87,6 +88,15 @@ const EntityCard = ({
             SPD {entity.speed}
           </span>
         )}
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); setInfoOpen(true); }}
+          title="Creature info"
+          aria-label={`Info for ${entity.name}`}
+          style={{ background: "none", border: "none", color: "#c4853a", cursor: "pointer", fontSize: 12 }}
+        >
+          ℹ
+        </button>
         <button
           type="button"
           onClick={() => onDismiss(entity.uid)}
@@ -158,9 +168,114 @@ const EntityCard = ({
           ))}
         </div>
       )}
-      {entity.notes && (
-        <div className="mt-1.5 text-[10px]" style={{ color: "#9a8a6a", fontFamily: "'Crimson Pro', serif" }}>{entity.notes}</div>
-      )}
+      {infoOpen && <EntityInfoDialog entity={entity} onClose={() => setInfoOpen(false)} />}
+    </div>
+  );
+};
+
+const formulaText = (f: RollableAttack["formula"]) =>
+  `${f.diceCount}d${f.diceSides}${f.stat ? ` + ${f.stat}` : ""}${f.flatBonus ? (f.flatBonus > 0 ? ` + ${f.flatBonus}` : ` − ${Math.abs(f.flatBonus)}`) : ""}`;
+
+const InfoSection = ({ title, children }: { title: string; children: ReactNode }) => (
+  <div className="flex flex-col gap-1.5">
+    <div className="text-[10px] uppercase tracking-widest" style={{ color: "#c4853a", fontFamily: FONT_HEAD, borderBottom: "1px solid rgba(196,133,58,0.2)" }}>{title}</div>
+    {children}
+  </div>
+);
+
+const InfoEntry = ({ name, meta, text }: { name: string; meta?: string; text?: string }) => (
+  <div>
+    <div className="text-xs" style={{ color: "#e2cfa0", fontFamily: FONT_HEAD }}>
+      {name}{meta && <span style={{ color: "#9a8a6a", fontFamily: FONT_MONO, marginLeft: 6 }}>{meta}</span>}
+    </div>
+    {text && <div className="text-xs" style={{ color: "#9a8a6a", fontFamily: "'Crimson Pro', serif", whiteSpace: "pre-wrap" }}>{text}</div>}
+  </div>
+);
+
+const EntityInfoDialog = ({ entity, onClose }: { entity: EntityInstance; onClose: () => void }) => {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  const def = entity.def;
+  const passives = def?.passiveAbilities ?? [];
+  const actives = def?.activeAbilities ?? [];
+  const tags = def?.tags ?? [];
+  const stats = def?.stats;
+  const effectNotes = (effects?: { note?: string }[]) =>
+    (effects ?? []).map((effect) => effect.note).filter(Boolean).join("\n");
+  const join = (...parts: (string | undefined)[]) => parts.filter(Boolean).join("\n") || undefined;
+
+  return (
+    <div className="fixed inset-0 flex items-center justify-center z-50" style={{ background: "rgba(0,0,0,0.75)" }} onClick={onClose}>
+      <div
+        role="dialog"
+        aria-label={`${entity.name} info`}
+        className="flex flex-col gap-3 w-full"
+        style={{ background: "#0e0c08", border: "1px solid rgba(196,133,58,0.4)", borderRadius: 8, padding: 20, maxWidth: 440, maxHeight: "85vh", overflowY: "auto" }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between">
+          <span className="text-sm font-bold uppercase" style={{ fontFamily: FONT_HEAD, color: "#c4853a" }}>{entity.name}</span>
+          <button type="button" onClick={onClose} aria-label="Close" style={{ background: "none", border: "none", color: "#9a8a6a", cursor: "pointer" }}>✕</button>
+        </div>
+
+        <InfoSection title="Creature Info">
+          <div className="text-xs" style={{ color: "#e2cfa0", fontFamily: FONT_MONO }}>
+            HP {entity.maxHp} · Armor {entity.armor} · MR {entity.magicResist}{entity.speed ? ` · SPD ${entity.speed}` : ""}
+          </div>
+          {stats && (
+            <div className="text-xs" style={{ color: "#9a8a6a", fontFamily: FONT_MONO }}>
+              PHYS {stats.PHYS} · CON {stats.CON} · INT {stats.INT} · SOC {stats.SOC}
+            </div>
+          )}
+          {tags.length > 0 && (
+            <div className="flex flex-wrap gap-1">
+              {tags.map((tag) => (
+                <span key={tag} className="text-[10px] px-1.5 py-0.5" style={{ border: "1px solid rgba(196,133,58,0.3)", borderRadius: 3, color: "#9a8a6a", fontFamily: FONT_MONO }}>{tag}</span>
+              ))}
+            </div>
+          )}
+          {entity.notes && <div className="text-xs" style={{ color: "#9a8a6a", fontFamily: "'Crimson Pro', serif" }}>{entity.notes}</div>}
+        </InfoSection>
+
+        {entity.attacks.length > 0 && (
+          <InfoSection title="Attacks">
+            {entity.attacks.map((attack) => (
+              <InfoEntry
+                key={attack.id}
+                name={attack.name}
+                meta={`${formulaText(attack.formula)}${attack.damageType ? ` · ${attack.damageType}` : ""}`}
+                text={join(attack.description, effectNotes(attack.effects))}
+              />
+            ))}
+          </InfoSection>
+        )}
+
+        {passives.length > 0 && (
+          <InfoSection title="Passives">
+            {passives.map((passive) => (
+              <InfoEntry key={passive.id} name={passive.name} meta={passive.trigger.replace(/_/g, " ")} text={join(passive.description, effectNotes(passive.effects))} />
+            ))}
+          </InfoSection>
+        )}
+
+        {actives.length > 0 && (
+          <InfoSection title="Actives">
+            {actives.map((ability) => {
+              const meta = [
+                ability.formula ? formulaText(ability.formula) : undefined,
+                ability.maxCharges ? `${ability.maxCharges} charges` : undefined,
+                ability.cooldownTurns ? `${ability.cooldownTurns}-turn cooldown` : undefined,
+                ability.resourceCost ? `costs ${ability.resourceCost.amount} ${ability.resourceCost.resourceId}` : undefined,
+              ].filter(Boolean).join(" · ");
+              return <InfoEntry key={ability.id} name={ability.name} meta={meta || undefined} text={join(ability.description, effectNotes(ability.effects))} />;
+            })}
+          </InfoSection>
+        )}
+      </div>
     </div>
   );
 };
